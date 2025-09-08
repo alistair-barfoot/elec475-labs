@@ -11,15 +11,26 @@ class autoencoderMLP4Layer(nn.Module):
 		#
 		#	Your code here ...
 		#
-		return
+		super(autoencoderMLP4Layer, self).__init__()
+		N2 = 392
+    self.fc1 = nn.Linear(N_input, N2)
+    self.fc2 = nn.Linear(N2, N_bottleneck)
+    self.fc3 = nn.Linear(N_bottleneck, N2)
+    self.fc4 = nn.Linear(N2, N_output)
+    self.type = 'MLP4'
+    self.input_shape = (1,28*28)
 
 	def forward(self, X):
 		#
 		#	Your code here ...
-		#		
-		
-	  return
+		#
+    X = self.fcl1(X)
+    X= F.relu(X)	
+    X = self.fcl2(X)
+    X= F.relu(X)	
 
-
-
-
+    X = self.fcl3(X)
+    X= F.relu(X)
+    X = self.fcl4(X)
+    X= torch.sigmoid(X)
+    return X
