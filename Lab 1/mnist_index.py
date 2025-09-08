@@ -11,9 +11,9 @@ try:
     idx = int(input())
     if(idx >= 0 and idx <= 59999):
       plt.imshow(train_set.data[idx], cmap='gray')
+      plt.xlabel(f"Index {idx}")
       plt.show()
     else:
       print("Error. Not within bounds")
 except KeyboardInterrupt:
   print("Exiting program now")
-
