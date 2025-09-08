@@ -60,6 +60,7 @@ def main():
         if 0 <= idx <= train_set.data.size()[0]:
             print('label = ', train_set.targets[idx].item())
             img = train_set.data[idx]
+            
             print('break 9', img.shape, img.dtype, torch.min(img), torch.max(img))
 
             img = img.type(torch.float32)
@@ -67,9 +68,15 @@ def main():
             img = (img - torch.min(img)) / torch.max(img)
             print('break 11', img.shape, img.dtype, torch.min(img), torch.max(img))
 
+            img_original = img.clone()
             # plt.imshow(img, cmap='gray')
             # plt.show()
 
+            # Add random noise to the image
+            noise_factor = 0.2  # Adjust this value as needed
+            noise = torch.rand(img.shape) * noise_factor
+            img = img + noise
+            img = torch.clamp(img, 0., 1.)
             img = img.to(device=device)
             # print('break 7: ', torch.max(img), torch.min(img), torch.mean(img))
             print('break 8 : ', img.shape, img.dtype)
@@ -90,11 +97,13 @@ def main():
             # plt.show()
 
             img = img.view(28, 28).type(torch.FloatTensor)
-
+            
             f = plt.figure()
-            f.add_subplot(1,2,1)
+            f.add_subplot(1,3,1)
+            plt.imshow(img_original, cmap='gray')
+            f.add_subplot(1,3,2)
             plt.imshow(img, cmap='gray')
-            f.add_subplot(1,2,2)
+            f.add_subplot(1,3,3)
             plt.imshow(output, cmap='gray')
             plt.show()
 
