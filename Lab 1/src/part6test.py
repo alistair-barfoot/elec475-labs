@@ -60,41 +60,30 @@ def main():
         n = input("enter number of iterations > ")
         n = int(n)
         if 0 <= idx <= train_set.data.size()[0]:
-            print('label = ', train_set.targets[idx].item())
             img = train_set.data[idx]
-            imgs=[]
-            imgs.append(img)
+            img = (img - torch.min(img)) / torch.max(img)
+            imgs = []
+            imgs.append(img.clone())
             for i in range(n):
                 if i>0:
                     img = imgs[i-1]
-                print('break 9', img.shape, img.dtype, torch.min(img), torch.max(img))
-
-                img = img.type(torch.float32)
-                print('break 10', img.shape, img.dtype, torch.min(img), torch.max(img))
+                img = img.type(torch.float32)                
                 img = (img - torch.min(img)) / torch.max(img)
-                print('break 11', img.shape, img.dtype, torch.min(img), torch.max(img))
-                # plt.imshow(img, cmap='gray')
-                # plt.show()
-                # print('break 7: ', torch.max(img), torch.min(img), torch.mean(img))
-                print('break 8 : ', img.shape, img.dtype)
-                img = img.view(1, img.shape[0]*img.shape[1]).type(torch.FloatTensor)
-                print('break 9 : ', img.shape, img.dtype)
-                with torch.no_grad():
-                    output = model(imgs[i-1].view(1, 28*28).to(device=device))
-                # output = output.view(28, 28).type(torch.ByteTensor)
-                # output = output.view(28, 28).type(torch.FloatTensor)
-                output = output.view(28, 28).type(torch.FloatTensor)
-                print('break 10 : ', output.shape, output.dtype)
-                print('break 11: ', torch.max(output), torch.min(output), torch.mean(output))
-                # plt.imshow(output, cmap='gray')
-                # plt.show()
 
-                # both = np.hstack((img.view(28, 28).type(torch.FloatTensor),output))
-                # plt.imshow(both, cmap='gray')
-                # plt.show()
+                # Add random noise to the image
+                noise_factor = 0.1
+                noise = torch.rand(img.shape) * noise_factor
+                img = img + noise
+                img = torch.clamp(img, 0., 1.)
+                img = img.to(device=device)
+                img = img.view(1, img.shape[0]*img.shape[1]).type(torch.FloatTensor)
+
+                with torch.no_grad():
+                    output = model(img.view(1, 28*28).to(device=device))
+                output = output.view(28, 28).type(torch.FloatTensor)
 
                 img = img.view(28, 28).type(torch.FloatTensor)
-                imgs.append(img)
+                imgs.append(output)
             
             f = plt.figure()
             for i in range(n):
