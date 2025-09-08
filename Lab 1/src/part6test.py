@@ -57,55 +57,51 @@ def main():
     while idx >= 0:
         idx = input("Enter index > ")
         idx = int(idx)
+        n = input("enter number of iterations > ")
+        n = int(n)
         if 0 <= idx <= train_set.data.size()[0]:
             print('label = ', train_set.targets[idx].item())
             img = train_set.data[idx]
-            
-            print('break 9', img.shape, img.dtype, torch.min(img), torch.max(img))
+            imgs=[]
+            imgs.append(img)
+            for i in range(n):
+                if i>0:
+                    img = imgs[i-1]
+                print('break 9', img.shape, img.dtype, torch.min(img), torch.max(img))
 
-            img = img.type(torch.float32)
-            print('break 10', img.shape, img.dtype, torch.min(img), torch.max(img))
-            img = (img - torch.min(img)) / torch.max(img)
-            print('break 11', img.shape, img.dtype, torch.min(img), torch.max(img))
+                img = img.type(torch.float32)
+                print('break 10', img.shape, img.dtype, torch.min(img), torch.max(img))
+                img = (img - torch.min(img)) / torch.max(img)
+                print('break 11', img.shape, img.dtype, torch.min(img), torch.max(img))
+                # plt.imshow(img, cmap='gray')
+                # plt.show()
+                # print('break 7: ', torch.max(img), torch.min(img), torch.mean(img))
+                print('break 8 : ', img.shape, img.dtype)
+                img = img.view(1, img.shape[0]*img.shape[1]).type(torch.FloatTensor)
+                print('break 9 : ', img.shape, img.dtype)
+                with torch.no_grad():
+                    output = model(imgs[i-1].view(1, 28*28).to(device=device))
+                # output = output.view(28, 28).type(torch.ByteTensor)
+                # output = output.view(28, 28).type(torch.FloatTensor)
+                output = output.view(28, 28).type(torch.FloatTensor)
+                print('break 10 : ', output.shape, output.dtype)
+                print('break 11: ', torch.max(output), torch.min(output), torch.mean(output))
+                # plt.imshow(output, cmap='gray')
+                # plt.show()
 
-            img_original = img.clone()
-            # plt.imshow(img, cmap='gray')
-            # plt.show()
+                # both = np.hstack((img.view(28, 28).type(torch.FloatTensor),output))
+                # plt.imshow(both, cmap='gray')
+                # plt.show()
 
-            # Add random noise to the image
-            noise_factor = 0.3
-            noise = torch.rand(img.shape) * noise_factor
-            img = img + noise
-            img = torch.clamp(img, 0., 1.)
-            img = img.to(device=device)
-            # print('break 7: ', torch.max(img), torch.min(img), torch.mean(img))
-            print('break 8 : ', img.shape, img.dtype)
-            img = img.view(1, img.shape[0]*img.shape[1]).type(torch.FloatTensor)
-            print('break 9 : ', img.shape, img.dtype)
-            with torch.no_grad():
-                output = model(img)
-            # output = output.view(28, 28).type(torch.ByteTensor)
-            # output = output.view(28, 28).type(torch.FloatTensor)
-            output = output.view(28, 28).type(torch.FloatTensor)
-            print('break 10 : ', output.shape, output.dtype)
-            print('break 11: ', torch.max(output), torch.min(output), torch.mean(output))
-            # plt.imshow(output, cmap='gray')
-            # plt.show()
-
-            # both = np.hstack((img.view(28, 28).type(torch.FloatTensor),output))
-            # plt.imshow(both, cmap='gray')
-            # plt.show()
-
-            img = img.view(28, 28).type(torch.FloatTensor)
+                img = img.view(28, 28).type(torch.FloatTensor)
+                imgs.append(img)
             
             f = plt.figure()
-            f.add_subplot(1,3,1)
-            plt.imshow(img_original, cmap='gray')
-            f.add_subplot(1,3,2)
-            plt.imshow(img, cmap='gray')
-            f.add_subplot(1,3,3)
-            plt.imshow(output, cmap='gray')
+            for i in range(n):
+                f.add_subplot(1,n,i+1)
+                plt.imshow(imgs[i], cmap='gray')
             plt.show()
+
 
 
 
