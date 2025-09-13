@@ -52,8 +52,28 @@ In the case of the decoder, the same process is used, but in reverse. The number
 
 \section{Training Details}
 % This section should include all details of the training, sufficient to exactly reproduce the training. This should include the optimization method used (e.g. SGD, Adam, etc.), optimization hyperparameters (e.g. initial learning rate, momentum, etc.), any learning rate scheduling used, and all other relevant details.
-For the training process, we used an Adam optimizer with a learning rate of 0.001 and a weight decay of 0.00001. The model was trained with a batch size of 2048 and for 50 epochs.
+We trained our model on the MNIST dataset, a set of 60,000 images of white handwritten digits on a black background, each 28x28 pixels in size. 
+\\
+\\
+For the training process, we used an Adam optimizer with a learning rate of 10e-3 and a weight decay of 10e-5. The model was trained with a batch size of 2048 and for 50 epochs down to a bottleneck size of 8. To calculate the loss, we used the Mean Squared Error (MSE) equation which computes as follows.
+\begin{equation}
+  MSE = \frac{1}{n} \sum_{i=1}^{n}(Y_i - \hat{Y}_i)^2
+\end{equation}
+\\
+Where: \\
+$n$ \>\> is the number of data points \\
+$Y_i$ \> is the observed value\\
+$\hat{Y}_i$ \> is the predicted value \\
+\\
+\\
+In this case, the observed and predicted values are each individual pixel value within the image.
 
 \section{Results}
-
+The loss curve for the training process as outlined is shown below.\\
+\includegraphics[scale=0.45]{src/loss.MLP.8.png}
+\\
+The loss for the first epoch is pretty high, over 10\%. In the first few epochs, however, the loss drops signifiantly until around epoch 20 where the loss remains at about 3\%. Overall, the curve follows a logarithmic pattern where most of the loss is reduced in the first few epochs. As the number of epochs increases, each epoch has less of an impact to the training of the model.
+\\
+\\
+This is an indicator of a successful training process and it leads to suggest that the model is trained well.
 \end{document}
