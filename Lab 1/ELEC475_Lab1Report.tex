@@ -1,0 +1,59 @@
+% DOCUMENT SETUP
+\documentclass[letterpaper,11pt,twoside]{article}
+\hyphenpenalty=8000
+\textwidth=125mm
+\textheight=200mm
+\usepackage[top=3cm, bottom=3cm, inner=3cm, outer=3cm, includehead]{geometry}
+\usepackage{fancyhdr}
+\setlength{\headheight}{13.6pt} % Fix for fancyhdr warning
+\addtolength{\topmargin}{-1.6pt} % Optional: further fix as suggested
+\pagestyle{fancy}
+\fancyhead{}
+\fancyfoot{}
+\raggedbottom
+\usepackage{xurl}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{alltt}
+\usepackage{amsmath}
+\usepackage[hidelinks, pdftex]{hyperref}
+\urlstyle{same}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{csquotes}
+\usepackage[notes, backend=biber]{biblatex-chicago}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\graphicspath{{./imgs/}}
+\usepackage[english]{babel}
+%\usepackage[french]{babel}
+%\usepackage[spanish]{babel}
+
+% AUTHOR AND TITLE
+\begin{document}
+\fancyhead[RO]{ELEC 475 Lab 1, Alistair Barfoot and Luke Barry\ \ \ \ \thepage}
+\begin{center}
+    \LARGE
+    \textbf{ELEC 475 Lab 1, Alistair Barfoot and Luke Barry}\\[12pt]
+    \normalsize
+\end{center}
+
+\section{Model Details}
+% This section should contain all details of the network, sufficient to recreate the model. This could be in textual form, diagrammatic, or other. The main requirement is that the description has sufficient details to fully and exactly recreate the model
+The model used for this lab was an simple Multi-Layer Perceptron (MLP) autoencoder. This network takes in an image, encodes it using the model, and then decodes it. The resultant image is a compressed version of the original image.
+\\
+\\
+MLP consists of a network of artificial neurons organized in layers and connected between layers via a learnable weight. In the case of the encoder, there is one neuron for each pixel in the input image (in this case, that would be 28x28=784). At each layer, the amount of neurons halves until reaching the final value known as the "bottleneck number". This model used a bottleneck number of 8.
+\\
+\\
+In the case of the decoder, the same process is used, but in reverse. The number of artificial neurons starts at the bottleneck number, doubling at each layer until reaching enough neurons for each pixel in the image.
+
+\section{Training Details}
+% This section should include all details of the training, sufficient to exactly reproduce the training. This should include the optimization method used (e.g. SGD, Adam, etc.), optimization hyperparameters (e.g. initial learning rate, momentum, etc.), any learning rate scheduling used, and all other relevant details.
+For the training process, we used an Adam optimizer with a learning rate of 0.001 and a weight decay of 0.00001. The model was trained with a batch size of 2048 and for 50 epochs.
+
+\section{Results}
+
+\end{document}
