@@ -24,8 +24,31 @@ def test_dataset_simple():
                 image, label = dataset[i]
                 filename = dataset.img_labels.iloc[i, 0]
                 print(f"✅ Item {i}: file={filename}, shape={image.shape}, label={label}")
-                cv2.imshow("Test Image", cv2.cvtColor(image.numpy().transpose(1, 2, 0), cv2.COLOR_RGB2BGR))
-                cv2.waitKey(0)  # Display each image until a key is pressed
+                
+                # Convert tensor image back to numpy array for OpenCV
+                # Image is in format [3, 227, 227], need to convert to [227, 227, 3]
+                img_numpy = image.numpy().transpose(1, 2, 0)  # [H, W, C]
+                img_numpy = (img_numpy * 255).astype(np.uint8)  # Convert to 0-255 range
+                
+                # Convert RGB to BGR for OpenCV
+                img_bgr = cv2.cvtColor(img_numpy, cv2.COLOR_RGB2BGR)
+                
+                # Draw circle at nose coordinates
+                nose_x = int(label[0].item())
+                nose_y = int(label[1].item())
+                print(f"   Drawing circle at nose position: ({nose_x}, {nose_y})")
+                
+                # Draw a green circle at the nose position
+                cv2.circle(img_bgr, (nose_x, nose_y), 5, (0, 255, 0), -1)  # Filled green circle
+                
+                # Also draw a red border for better visibility
+                cv2.circle(img_bgr, (nose_x, nose_y), 7, (0, 0, 255), 2)   # Red border circle
+                
+                # Display the image
+                cv2.imshow(f"Nose Detection - {filename}", img_bgr)
+                print(f"   Press any key to continue to next image...")
+                cv2.waitKey(0)  # Wait for key press
+                cv2.destroyAllWindows()  # Close the window
             
             return True, "Direct import from train.py works perfectly!"
             
