@@ -2,7 +2,6 @@ import os
 import pandas as pd
 from torchvision.io import decode_image
 from torch.utils.data import Dataset
-from model import snoutNet
 import torch
 
 class CustomDataset(Dataset):
@@ -23,19 +22,25 @@ class CustomDataset(Dataset):
     if self.target_transform:
       label = self.target_transform(label)
     return image, label
-  
-# Example usage:
-# dataset = CustomDataset(annotations_file='path/to/annotations.csv', img_dir='path/to/images', transform=your_transform)
-def main():
-  # Example usage:
-  dataset = CustomDataset(annotations_file='train_noses.txt', img_dir='images', transform=None)
-  print(f"Dataset length: {len(dataset)}")
 
-  # Test just the first few items
-  for i, (image, label) in enumerate(dataset):
-    print(f"Item {i}: image shape = {image.shape}, label = {label}")
-    if i >= 2:  # Only test first 3 items
-      break
+# Test the dataset
+print("Creating dataset...")
+dataset = CustomDataset(annotations_file='train_noses.txt', img_dir='images', transform=None)
+print(f"Dataset length: {len(dataset)}")
 
-if __name__ == "__main__":
-  main()
+# Test first item
+print("Loading first item...")
+image, label = dataset[0]
+print(f"Item 0: image shape = {image.shape}, label = {label}")
+
+# Test second item
+print("Loading second item...")
+image, label = dataset[1]
+print(f"Item 1: image shape = {image.shape}, label = {label}")
+
+# Test final item
+print("Loading final item...")
+image, label = dataset[len(dataset)-1]
+print(f"Item {len(dataset)-1}: image shape = {image.shape}, label = {label}")
+
+print("Dataset test completed successfully!")
