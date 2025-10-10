@@ -11,7 +11,7 @@ transform = transforms.Compose([
 ])
 
 # Load dataset
-dataset = CustomDataset(annotations_file='train_noses.txt', img_dir='images-original', transform=None)
+dataset = CustomDataset(annotations_file='train_noses.txt', img_dir='images-original/images')
 
 for i in range(3):
                 image, label = dataset[i]
