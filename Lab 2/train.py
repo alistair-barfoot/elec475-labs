@@ -1,70 +1,70 @@
-import os
-import pandas as pd
-from torchvision.io import decode_image
-from torch.utils.data import Dataset
-from model import snoutNet
 import torch
-from PIL import Image
-import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from model import snoutNet
+from dataset import CustomDataset
+import matplotlib.pyplot as plt
 
-class CustomDataset(Dataset):
-  def __init__(self, annotations_file, img_dir, transform=None, target_transform=None):
-      self.img_labels = pd.read_csv(annotations_file, header=None, names=['filename', 'coordinates'])
-      self.img_dir = img_dir
-      self.transform = transform
-      self.target_transform = target_transform
+# Paths
+train_ann = "train_noses.txt"
+test_ann = "test_noses.txt"
+img_dir = "images"
 
-  def __len__(self):
-      return len(self.img_labels)
 
-  def __getitem__(self, idx):
-      img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
-      
-      # Use PIL for image loading
-      image = Image.open(img_path)
-      
-      # Get original image dimensions for coordinate scaling
-      original_width, original_height = image.size
-      
-      # Transform to ensure all images are [3, 227, 227]
-      transform_to_227 = transforms.Compose([
-          transforms.Resize((227, 227)),  # Resize to 227x227
-          transforms.ToTensor()           # Convert to tensor [3, 227, 227]
-      ])
-      image = transform_to_227(image)
-      
-      # Transform coordinates based on image resizing
-      label_str = self.img_labels.iloc[idx, 1]
-      # Parse coordinates from string format "(x, y)"
-      coords = label_str.strip('()').split(', ')
-      original_x = float(coords[0])
-      original_y = float(coords[1])
-      
-      # Scale coordinates to match the resized image (227x227)
-      scaled_x = (original_x / original_width) * 227
-      scaled_y = (original_y / original_height) * 227
-      
-      # Return scaled coordinates as a tensor
-      label = torch.tensor([scaled_x, scaled_y], dtype=torch.float32)
-      
-      if self.transform:
-          image = self.transform(image)
-      if self.target_transform:
-          label = self.target_transform(label)
-      return image, label
-  
-# Example usage:
-# dataset = CustomDataset(annotations_file='path/to/annotations.csv', img_dir='path/to/images', transform=your_transform)
-def main():
-  # Example usage:
-  dataset = CustomDataset(annotations_file='train_noses.txt', img_dir='images', transform=None)
-  print(f"Dataset length: {len(dataset)}")
+# Datasets and loaders
+train_dataset = CustomDataset(train_ann, img_dir)
+test_dataset = CustomDataset(test_ann, img_dir)
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=32)
 
-  # Test just the first few items
-  for i, (image, label) in enumerate(dataset):
-    print(f"Item {i}: image shape = {image.shape}, label = {label}")
-    if i >= 2:  # Only test first 3 items
-      break
+# Model, loss, optimizer
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = snoutNet().to(device)
+criterion = torch.nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-if __name__ == "__main__":
-  main()
+num_epochs = 20
+train_losses = []
+val_losses = []
+
+for epoch in range(num_epochs):
+    model.train()
+    running_loss = 0.0
+    for images, labels in train_loader:
+        images = images.to(device)
+        labels = labels.to(device)
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        running_loss += loss.item() * images.size(0)
+    epoch_loss = running_loss / len(train_loader.dataset)
+    train_losses.append(epoch_loss)
+
+    # Validation
+    model.eval()
+    val_loss = 0.0
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            val_loss += loss.item() * images.size(0)
+    val_loss /= len(test_loader.dataset)
+    val_losses.append(val_loss)
+
+    print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {epoch_loss:.4f} | Val Loss: {val_loss:.4f}")
+
+# Plot loss curves
+plt.plot(train_losses, label="Train Loss")
+plt.plot(val_losses, label="Val Loss")
+plt.xlabel("Epoch")
+plt.ylabel("MSE Loss")
+plt.legend()
+plt.title("Training and Validation Loss")
+plt.show()
+
+# Save model
+torch.save(model.state_dict(), "snoutnet_trained.pth")
