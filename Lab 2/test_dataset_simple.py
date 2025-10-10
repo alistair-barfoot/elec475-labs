@@ -21,7 +21,8 @@ def test_dataset_simple():
             # Test loading first few items
             for i in range(3):
                 image, label = dataset[i]
-                print(f"✅ Item {i}: shape={image.shape}, label={label}")
+                filename = dataset.img_labels.iloc[i, 0]
+                print(f"✅ Item {i}: file={filename}, shape={image.shape}, label={label}")
             
             return True, "Direct import from train.py works perfectly!"
             
@@ -29,52 +30,6 @@ def test_dataset_simple():
             print(f"❌ Direct import failed: {e}")
             print("Likely cause: torchvision.io.decode_image import issues")
             
-        # Fallback: Test the structure manually
-        print("\nAttempt 2: Testing CustomDataset structure manually...")
-        import torch
-        from torch.utils.data import Dataset
-        
-        # Recreate the exact class from train.py but with PIL fallback
-        class CustomDataset(Dataset):
-            def __init__(self, annotations_file, img_dir, transform=None, target_transform=None):
-                self.img_labels = pd.read_csv(annotations_file, header=None, names=['filename', 'coordinates'])
-                self.img_dir = img_dir
-                self.transform = transform
-                self.target_transform = target_transform
-            
-            def __len__(self):
-                return len(self.img_labels)
-            
-            def __getitem__(self, idx):
-                img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
-                
-                # Use PIL for image loading as fallback
-                from PIL import Image
-                import torchvision.transforms as transforms
-                
-                image = Image.open(img_path)
-                # Convert PIL to tensor (same result as decode_image)
-                to_tensor = transforms.ToTensor()
-                image = to_tensor(image)
-                
-                label = self.img_labels.iloc[idx, 1]
-                if self.transform:
-                    image = self.transform(image)
-                if self.target_transform:
-                    label = self.target_transform(label)
-                return image, label
-        
-        print("✅ CustomDataset class structure recreated successfully")
-        
-        dataset = CustomDataset('train_noses.txt', 'images')
-        print(f"✅ Dataset created: {len(dataset)} items")
-        
-        # Test loading
-        for i in range(3):
-            image, label = dataset[i]
-            print(f"✅ Item {i}: shape={image.shape}, label={label}")
-            
-        return True, "CustomDataset structure is correct, but torchvision.io.decode_image has import issues"
         
     except Exception as e:
         print(f"❌ Error in testing: {e}")
