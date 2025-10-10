@@ -71,7 +71,7 @@ def main():
                 img = (img - torch.min(img)) / torch.max(img)
 
                 # Add random noise to the image
-                noise_factor = 0.1
+                noise_factor = 0.2
                 noise = torch.rand(img.shape) * noise_factor
                 img = img + noise
                 img = torch.clamp(img, 0., 1.)
