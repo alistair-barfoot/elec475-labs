@@ -19,6 +19,8 @@ test_loader = DataLoader(test_dataset, batch_size=32)
 
 # Model, loss, optimizer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.cuda.is_available():
+    print("Using GPU for training")
 model = snoutNet().to(device)
 criterion = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
