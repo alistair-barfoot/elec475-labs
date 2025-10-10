@@ -1,17 +1,32 @@
-# ELEC 475 Lab 2 - snoutNet CNN Classifier
+# ELEC 475 Lab 2 - snoutNet CNN for Nose Detection
 
-This repository contains the implementation of **snoutNet**, a Convolutional Neural Network designed for binary image classification tasks. The network is specifically designed to process 227x227x3 RGB images and classify them into two categories.
+This repository contains the implementation of **snoutNet**, a Convolutional Neural Network designed for animal nose detection and localization. The network processes 227x227x3 RGB images and predicts (x, y) coordinates of nose locations.
 
 ## 📁 Project Structure
 
 ```
 Lab 2/
-├── README.md           # This file
-├── model.py           # snoutNet CNN architecture
-├── train.py           # Training script with comprehensive features
-├── image.png          # Sample image or documentation
-└── ELEC475_Lab2.pdf   # Lab assignment document
+├── README.md               # This file
+├── model.py               # snoutNet CNN architecture
+├── train.py               # Updated training script for nose detection
+├── validate_data.py       # Dataset validation and visualization
+├── run_training.py        # Convenience script for training
+├── train_noses.txt        # Training labels (image,coordinates)
+├── test_noses.txt         # Test labels (image,coordinates)
+├── images/                # Directory containing all image files
+│   ├── beagle_145.jpg
+│   ├── shiba_inu_136.jpg
+│   └── ...
+└── ELEC475_Lab2.pdf       # Lab assignment document
 ```
+
+## 🎯 Task: Nose Detection
+
+This implementation has been updated to perform **nose coordinate regression** instead of classification. The model:
+- Takes RGB images of animals as input
+- Outputs 2D coordinates (x, y) predicting nose location
+- Uses MSE loss for regression training
+- Reports accuracy in terms of pixel-level error
 
 ## 🧠 Model Architecture
 
@@ -242,29 +257,96 @@ Common hyperparameters to tune:
 - numpy
 - tqdm
 - PIL (Pillow)
+## � Dataset Format for Nose Detection
+
+### Label Files Format
+The nose detection task uses coordinate labels in text files:
+
+**train_noses.txt** and **test_noses.txt** format:
+```
+filename,"(x, y)"
+```
+
+Example:
+```
+beagle_145.jpg,"(198, 304)"
+shiba_inu_136.jpg,"(182, 203)"
+english_cocker_spaniel_181.jpg,"(145, 293)"
+chihuahua_165.jpg,"(122, 122)"
+```
+
+### Usage Instructions
+
+#### 1. Validate Dataset
+Before training, check your data:
+```bash
+python validate_data.py --images_dir images --train_labels train_noses.txt --test_labels test_noses.txt
+```
+
+#### 2. Train the Model
+Quick start with optimal settings:
+```bash
+python run_training.py
+```
+
+Or manually specify parameters:
+```bash
+python train.py \
+  --images_dir images \
+  --train_labels train_noses.txt \
+  --test_labels test_noses.txt \
+  --batch_size 16 \
+  --epochs 25 \
+  --learning_rate 0.0001
+```
+
+#### 3. Key Parameters
+- `--images_dir`: Directory containing all image files
+- `--train_labels`: Path to training coordinate labels
+- `--test_labels`: Path to test coordinate labels  
+- `--val_split`: Fraction of training data for validation (default: 0.2)
+
+### Performance Metrics
+- **Loss**: Mean Squared Error between predicted and actual coordinates
+- **Error**: Mean Euclidean distance in pixels
+- **Good Performance**: Mean error < 20-30 pixels
 
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
-1. **CUDA Out of Memory**
+1. **Dataset Validation Fails**
    ```bash
-   python train.py --data_dir "your/data" --batch_size 16
+   python validate_data.py  # Check for missing images or parsing errors
    ```
 
-2. **Dataset Not Found**
-   - Ensure your dataset follows the required folder structure
-   - Check that image files are in supported formats (jpg, png, etc.)
+2. **Large Coordinate Errors**
+   - Reduce learning rate to 0.0001 or lower
+   - Increase training epochs
+   - Check coordinate label accuracy
 
-3. **Low Accuracy**
-   - Try reducing the learning rate: `--learning_rate 0.0001`
-   - Increase training epochs: `--epochs 100`
-   - Check data quality and class balance
+3. **CUDA Out of Memory**
+   ```bash
+   python train.py --batch_size 8  # Reduce batch size
+   ```
 
-4. **Training Too Slow**
+4. **Coordinate Parse Errors**
+   - Ensure coordinate format is exactly: `filename,"(x, y)"`
+   - Check for special characters in filenames
+   - Verify all referenced images exist in images/ directory
+
+5. **Training Too Slow**
    - Ensure CUDA is available and working
    - Reduce `num_workers` in data loaders if CPU is bottleneck
    - Consider using a smaller batch size
+
+## 📈 Expected Results
+
+After training, you should see:
+- Training and validation error curves
+- Sample images with predicted vs actual nose locations
+- Error distribution histogram for test set
+- Mean pixel error typically 15-40 pixels for good models
 
 ## 📚 References
 
