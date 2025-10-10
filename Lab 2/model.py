@@ -28,7 +28,7 @@ class snoutNet(nn.Module):
         self.mp3 = nn.MaxPool2d(kernel_size=3, stride=4, padding=1)
 
         # FC1: 4x4x256 -> 1024
-        self.fc1 = nn.Linear(4096, 1024)
+        self.fc1 = nn.Linear(256, 1024)
         self.relu4 = nn.ReLU()
 
         # FC2: 1024 -> 1024
@@ -51,7 +51,7 @@ class snoutNet(nn.Module):
         x = self.relu3(x)
         x = self.mp3(x)
 
-        x = x.view(-1, 4096)  # Flatten
+        x = x.view(x.size(0), -1)  # Flatten
 
         x = self.fc1(x)
         x = self.relu4(x)
