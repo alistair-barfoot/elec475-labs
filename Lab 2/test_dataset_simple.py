@@ -1,6 +1,8 @@
 import os
 import pandas as pd
 import numpy as np
+import cv2
+from train import CustomDataset
 
 # Test dataset loading using the CustomDataset class structure from train.py
 def test_dataset_simple():
@@ -12,7 +14,6 @@ def test_dataset_simple():
         # Try to import directly from train.py first
         print("Attempt 1: Direct import from train.py...")
         try:
-            from train import CustomDataset
             print("✅ Direct import successful!")
             
             dataset = CustomDataset(annotations_file='train_noses.txt', img_dir='images', transform=None)
@@ -23,6 +24,8 @@ def test_dataset_simple():
                 image, label = dataset[i]
                 filename = dataset.img_labels.iloc[i, 0]
                 print(f"✅ Item {i}: file={filename}, shape={image.shape}, label={label}")
+                cv2.imshow("Test Image", cv2.cvtColor(image.numpy().transpose(1, 2, 0), cv2.COLOR_RGB2BGR))
+                cv2.waitKey(0)  # Display each image until a key is pressed
             
             return True, "Direct import from train.py works perfectly!"
             
