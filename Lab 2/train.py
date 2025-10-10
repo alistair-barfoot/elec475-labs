@@ -4,6 +4,8 @@ from torchvision.io import decode_image
 from torch.utils.data import Dataset
 from model import snoutNet
 import torch
+from PIL import Image
+import torchvision.transforms as transforms
 
 class CustomDataset(Dataset):
   def __init__(self, annotations_file, img_dir, transform=None, target_transform=None):
@@ -19,9 +21,6 @@ class CustomDataset(Dataset):
       img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
       
       # Use PIL for image loading as fallback
-      from PIL import Image
-      import torchvision.transforms as transforms
-      
       image = Image.open(img_path)
       
       # Transform to ensure all images are [3, 227, 227]
