@@ -68,8 +68,9 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
         print(f"Time Elapsed: {sec_to_hms(elapsed)} | Remaining: {sec_to_hms(remaining)}")
 
         if plot_file != None:
-            plt.figure(2, figsize=(12, 7))
+            plt.figure(2)
             plt.clf()
+            plt.gcf().set_size_inches(12, 7)
             plt.plot(losses_train, label='train')
             plt.plot(losses_test, label='test')
             plt.xlabel('Epochs')

@@ -1,2 +1,3 @@
 snoutnet_weights.pth, n_epochs = 30, batch_size = 30, train_loss = 818
 snoutnet_weights_A.pth, n_epochs = 20, batch_size = 64, train_loss = 1003
+snoutnet_weights_B.pth, n_epochs = 30, batch_size = 16, train_loss = 760
