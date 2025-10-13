@@ -1,0 +1,1 @@
+snoutnet_weights.pth, bottleneck_size = 32, n_epochs = 30, batch_size = 30, train_loss = 818
