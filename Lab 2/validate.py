@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import argparse
 import pandas as pd
+import glob
 
 
 def load_and_preprocess_image(image_path):
@@ -132,6 +133,70 @@ def visualize_prediction(image_path, predicted_coords, ground_truth_coords=None,
     cv2.destroyAllWindows()
 
 
+def validate_single_model(model_path, labels, args):
+    """
+    Validate a single model and return results.
+    
+    Args:
+        model_path (str): Path to the model file
+        labels (pd.DataFrame): Ground truth data
+        args: Command line arguments
+        
+    Returns:
+        dict: Validation results
+    """
+    distances = []
+    
+    for _, row in labels.iterrows():
+        filename = row['filename']
+        image_path = os.path.join('images', filename)
+        
+        if not os.path.exists(image_path):
+            if args.verbose:
+                print(f"Warning: Image not found: {image_path}")
+            continue
+        
+        try:
+            # Get ground truth coordinates
+            ground_x, ground_y = parse_ground_truth_coordinates(row['coordinates'])
+            
+            # Get predicted coordinates
+            pred_x, pred_y = predict_nose_coordinates(image_path, model_path=model_path)
+            
+            # Calculate distance
+            distance = np.linalg.norm(np.array([pred_x, pred_y]) - np.array([ground_x, ground_y]))
+            distances.append(distance)
+            
+            if args.verbose and not args.all:
+                print(f"Image: {filename}")
+                print(f"Ground truth: ({ground_x}, {ground_y})")
+                print(f"Predicted: ({pred_x:.2f}, {pred_y:.2f})")
+                print(f"Distance: {distance:.2f} pixels")
+                print("-" * 50)
+            
+            if args.show and not args.all:
+                visualize_prediction(image_path, (pred_x, pred_y), 
+                                   (ground_x, ground_y), args.ground)
+        
+        except Exception as e:
+            if args.verbose:
+                print(f"Error processing {filename}: {e}")
+            continue
+    
+    # Calculate statistics
+    if distances:
+        mean, std_dev = calculate_statistics(distances)
+        return {
+            'count': len(distances),
+            'mean': mean,
+            'std_dev': std_dev,
+            'min': min(distances),
+            'max': max(distances)
+        }
+    else:
+        return None
+
+
 def main():
     """Main validation function."""
     parser = argparse.ArgumentParser(description='Validate snoutNet model on test images')
@@ -141,54 +206,89 @@ def main():
                        help='Print detailed results for each image')
     parser.add_argument('-s', '--show', action='store_true', 
                        help='Display images with predicted coordinates')
+    parser.add_argument('-m', '--model', type=str, default='models/snoutnet_weights.pth',
+                       help='Path to the trained model file')
+    parser.add_argument('-a', '--all', action='store_true',
+                       help='Validate all .pth files in the models folder')
     args = parser.parse_args()
 
     # Load ground truth data
     labels = pd.read_csv('test_noses.txt', header=None, names=['filename', 'coordinates'])
-    distances = []
 
-    print("Validating model predictions...")
+    if args.all:
+        # Get all .pth files in the models folder
+        model_files = glob.glob('models/*.pth')
+        
+        if not model_files:
+            print("No .pth files found in the models folder.")
+            return
+        
+        print(f"Found {len(model_files)} model files. Validating all models...\n")
+        
+        results_summary = []
+        
+        for model_path in sorted(model_files):
+            model_name = os.path.basename(model_path)
+            print(f"Validating model: {model_name}")
+            
+            try:
+                results = validate_single_model(model_path, labels, args)
+                
+                if results:
+                    print(f"Results for {model_name}:")
+                    print(f"  Count: {results['count']}")
+                    print(f"  Mean: {results['mean']:.1f} pixels")
+                    print(f"  Std Dev: {results['std_dev']:.1f} pixels")
+                    print(f"  Min: {results['min']:.1f} pixels")
+                    print(f"  Max: {results['max']:.1f} pixels")
+                    
+                    results_summary.append({
+                        'model': model_name,
+                        'mean': results['mean'],
+                        'std_dev': results['std_dev'],
+                        'count': results['count'],
+                        'min': results['min'],
+                        'max': results['max']
+                    })
+                else:
+                    print(f"  No valid results for {model_name}")
+                    
+            except Exception as e:
+                print(f"  Error validating {model_name}: {e}")
+            
+            print("-" * 60)
+        
+        # Print summary comparison
+        if results_summary:
+            print("\nSUMMARY COMPARISON:")
+            print("=" * 80)
+            print(f"{'Model':<30} {'Mean':<10} {'Std Dev':<10} {'Min':<10} {'Max':<10} ")
+            print("-" * 80)
+            
+            # Sort by mean error (best first)
+            results_summary.sort(key=lambda x: x['mean'])
+            
+            for result in results_summary:
+                print(f"{result['model']:<30} {result['mean']:<10.1f} {result['std_dev']:<10.1f} {result['min']:<10.1f} {result['max']:<10.1f}")
+            print(f"\nBest performing model: {results_summary[0]['model']} (Mean: {results_summary[0]['mean']:.1f} pixels)")
     
-    for _, row in labels.iterrows():
-        filename = row['filename']
-        image_path = os.path.join('images', filename)
-        
-        if not os.path.exists(image_path):
-            print(f"Warning: Image not found: {image_path}")
-            continue
-        
-        # Get ground truth coordinates
-        ground_x, ground_y = parse_ground_truth_coordinates(row['coordinates'])
-        
-        # Get predicted coordinates
-        pred_x, pred_y = predict_nose_coordinates(image_path)
-        
-        # Calculate distance
-        distance = np.linalg.norm(np.array([pred_x, pred_y]) - np.array([ground_x, ground_y]))
-        distances.append(distance)
-        
-        if args.verbose:
-            print(f"Image: {filename}")
-            print(f"Ground truth: ({ground_x}, {ground_y})")
-            print(f"Predicted: ({pred_x:.2f}, {pred_y:.2f})")
-            print(f"Distance: {distance:.2f} pixels")
-            print("-" * 50)
-        
-        if args.show:
-            visualize_prediction(image_path, (pred_x, pred_y), 
-                               (ground_x, ground_y), args.ground)
-    
-    # Calculate and display statistics
-    if distances:
-        mean, std_dev = calculate_statistics(distances)
-        print(f"\nValidation Results:")
-        print(f"Count: {len(distances)}")
-        print(f"Mean: {mean:.1f} pixels")
-        print(f"Std Dev: {std_dev:.1f} pixels")
-        print(f"Min: {min(distances):.1f} pixels")
-        print(f"Max: {max(distances):.1f} pixels")
     else:
-        print("No valid images found for validation.")
+        # Single model validation (original behavior)
+        model_path = args.model
+        
+        print(f"Validating single model: {os.path.basename(model_path)}")
+        
+        results = validate_single_model(model_path, labels, args)
+        
+        if results:
+            print(f"\nValidation Results:")
+            print(f"Count: {results['count']}")
+            print(f"Mean: {results['mean']:.1f} pixels")
+            print(f"Std Dev: {results['std_dev']:.1f} pixels")
+            print(f"Min: {results['min']:.1f} pixels")
+            print(f"Max: {results['max']:.1f} pixels")
+        else:
+            print("No valid images found for validation.")
 
 
 if __name__ == "__main__":
