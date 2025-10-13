@@ -83,11 +83,10 @@ def init_weights(m):
         m.bias.data.fill_(0.01)
 
 def main():
-    global bottleneck_size, save_file, n_epochs, batch_size
+    global save_file, n_epochs, batch_size
 
     argParser = argparse.ArgumentParser()
     argParser.add_argument('-s', metavar='state', type=str, help='parameter file (.pth)')
-    argParser.add_argument('-z', metavar='bottleneck size', type=int, help='int [32]')
     argParser.add_argument('-e', metavar='epochs', type=int, help='# of epochs [30]')
     argParser.add_argument('-b', metavar='batch size', type=int, help='batch size [32]')
     argParser.add_argument('-p', metavar='plot', type=str, help='output loss plot file (.png)')
@@ -103,8 +102,6 @@ def main():
 
     if args.s != None:
         save_file = args.s
-    if args.z != None:
-        bottleneck_size = args.z
     if args.e != None:
         n_epochs = args.e
     if args.b != None:
@@ -112,7 +109,6 @@ def main():
     if args.p != None:
         plot_file = args.p
 
-    print('\t\tbottleneck size = ', bottleneck_size)
     print('\t\tn epochs = ', n_epochs)
     print('\t\tbatch size = ', batch_size)
     print('\t\tsave file = ', save_file)
