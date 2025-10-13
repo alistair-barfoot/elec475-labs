@@ -2,11 +2,18 @@ import os
 import pandas as pd
 import numpy as np
 import cv2
+from torchvision.transforms import transforms
 from dataset import CustomDataset
 
 def test_dataset(start_i=0):
     # Initialize the dataset
-    dataset = CustomDataset(annotations_file='train_noses.txt', img_dir='images', transform=None)            
+    transform = transforms.Compose([
+        transforms.Resize((227, 227)),
+        # transforms.RandomHorizontalFlip(p=1.0), 
+        transforms.ToTensor()],
+    )
+    
+    dataset = CustomDataset(annotations_file='train_noses.txt', img_dir='images', transform=transform)
             
     for i in range(start_i, start_i+3):
         image, label = dataset[i]
