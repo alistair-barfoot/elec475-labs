@@ -51,12 +51,16 @@ class CustomDataset(Dataset):
 
       for t in transforms_list:
         if t.__class__.__name__ == "RandomHorizontalFlip":
-          flip_applied = True
-          break
-
-      if flip_applied:
-        # If the image was flipped horizontally, mirror the x coordinate on the 227px width
-        scaled_x = 227.0 - scaled_x
+          scaled_x = 227.0 - scaled_x
+        if t.__class__.__name__ == "RandomVerticalFlip":
+          scaled_y = 227.0 - scaled_y
+        if t.__class__.__name__ == "RandomRotation":
+          if t.degrees == 90 or (isinstance(t.degrees, (list, tuple)) and 90 in t.degrees):
+            # For 90 degree rotation, swap x and y coordinates
+            scaled_x, scaled_y = scaled_y, 227.0 - scaled_x
+          elif t.degrees == -90 or (isinstance(t.degrees, (list, tuple)) and -90 in t.degrees):
+            # For 270 degree rotation, swap x and y coordinates
+            scaled_x, scaled_y = 227.0 - scaled_y, scaled_x
       
       # Return scaled coordinates as a tensor
       label = torch.tensor([scaled_x, scaled_y], dtype=torch.float32)

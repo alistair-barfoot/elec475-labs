@@ -10,6 +10,8 @@ def test_dataset(start_i=0):
     transform = transforms.Compose([
         transforms.Resize((227, 227)),
         # transforms.RandomHorizontalFlip(p=1.0), 
+        transforms.RandomVerticalFlip(p=1.0),
+        # transforms.RandomRotation(degrees=(90,90)),
         transforms.ToTensor()],
     )
     
