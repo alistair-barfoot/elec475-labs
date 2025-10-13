@@ -125,10 +125,16 @@ def main():
     model.apply(init_weights)
     summary(model, (3, 96, 96))
 
-    train_set = CustomDataset(train_ann, img_dir)
+    transform = transforms.Compose([
+        transforms.Resize((227, 227)),
+        transforms.ToTensor(),
+        ],
+    )
+
+    train_set = CustomDataset(train_ann, img_dir, transform=transform)
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 
-    test_set = CustomDataset(test_ann, img_dir)
+    test_set = CustomDataset(test_ann, img_dir, transform=transform)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
