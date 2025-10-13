@@ -28,6 +28,7 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
     time_start = time.time()
     for epoch in range(1, n_epochs+1):
         loss_train = 0.0
+        loss_test = 0.0
         for data, labels in train_loader:
             imgs = data.to(device=device)
             labels = labels.to(device=device)
@@ -94,7 +95,6 @@ def main():
     args = argParser.parse_args()
 
     save_file = 'snoutnet_weights.pth'
-    bottleneck_size = 32
     n_epochs = 30
     batch_size = 32
     plot_file = 'snoutnet_plot.png'
@@ -134,7 +134,18 @@ def main():
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5)
     loss_fn = nn.MSELoss(size_average=None, reduce=None, reduction='mean')
 
-    train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, scheduler, device, save_file, plot_file)
+    train(
+        n_epochs=n_epochs,
+        optimizer=optimizer,
+        model=model,
+        loss_fn=loss_fn,
+        train_loader=train_loader,
+        test_loader=test_loader,
+        scheduler=scheduler,
+        device=device,
+        save_file=save_file,
+        plot_file=plot_file
+    )
 
 if __name__ == '__main__':
     main()
