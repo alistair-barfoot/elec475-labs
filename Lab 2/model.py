@@ -11,24 +11,24 @@ class snoutNet(nn.Module):
         # Conv1: 227x227x3 -> 57x57x64
         # k = 3x3x3
         # N_o = (N_i - F + 2P)/S + 1
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, stride=4, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, stride=2, padding=1)
         self.relu1 = nn.ReLU()
-        self.mp1 = nn.MaxPool2d(kernel_size=3, stride=4, padding=1)
+        self.mp1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         # Conv2: 57x57x64 -> 15x15x128
         # k = 3x3x64
-        self.conv2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=4, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1)
         self.relu2 = nn.ReLU()
-        self.mp2 = nn.MaxPool2d(kernel_size=3, stride=4, padding=1)
+        self.mp2 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         # Conv3: 15x15x128 -> 4x4x256
         # k = 3x3x128
-        self.conv3 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=4, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1)
         self.relu3 = nn.ReLU()
-        self.mp3 = nn.MaxPool2d(kernel_size=3, stride=4, padding=1)
+        self.mp3 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         # FC1: 4x4x256 -> 1024
-        self.fc1 = nn.Linear(256, 1024)
+        self.fc1 = nn.Linear(4*4*256, 1024)
         self.relu4 = nn.ReLU()
 
         # FC2: 1024 -> 1024

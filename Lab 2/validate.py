@@ -150,6 +150,7 @@ def validate_single_model(model_path, labels, args):
     for _, row in labels.iterrows():
         filename = row['filename']
         image_path = os.path.join('images', filename)
+        img = cv2.imread(image_path)
         
         if not os.path.exists(image_path):
             if args.verbose:
@@ -159,19 +160,29 @@ def validate_single_model(model_path, labels, args):
         try:
             # Get ground truth coordinates
             ground_x, ground_y = parse_ground_truth_coordinates(row['coordinates'])
-            
+            ground_x /= img.shape[1] / 227
+            ground_y /= img.shape[0] / 227
+
             # Get predicted coordinates
             pred_x, pred_y = predict_nose_coordinates(image_path, model_path=model_path)
-            
+            pred_x /= img.shape[1] / 227
+            pred_y /= img.shape[0] / 227
+
             # Calculate distance
             distance = np.linalg.norm(np.array([pred_x, pred_y]) - np.array([ground_x, ground_y]))
             distances.append(distance)
-            
+
+            pred_x *= img.shape[1] / 227
+            pred_y *= img.shape[0] / 227
+
+            ground_x *= img.shape[1] / 227
+            ground_y *= img.shape[0] / 227
+
             if args.verbose and not args.all:
                 print(f"Image: {filename}")
                 print(f"Ground truth: ({ground_x}, {ground_y})")
                 print(f"Predicted: ({pred_x:.2f}, {pred_y:.2f})")
-                print(f"Distance: {distance:.2f} pixels")
+                print(f"Relative Distance: {distance:.2f} pixels")
                 print("-" * 50)
             
             if args.show and not args.all:

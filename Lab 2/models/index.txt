@@ -9,3 +9,4 @@ snoutnet_weights_H.pth, n_epochs = 30, batch_size = 16, train_loss = 923, 1/2 le
 snoutnet_weights_I.pth, n_epochs = 30, batch_size = 32, train_loss = 955, 1/2 learning rate
 snoutnet_weights_J.pth, n_epochs = 30, batch_size = 64, train_loss = 989, 1/2 learning rate
 snoutnet_weights_K.pth, n_epochs = 30, batch_size = 128, train_loss = 1011, 1/2 learning rate
+snoutnet_weights_L.pth, n_epochs = 28, batch_size = 16, train_loss = 50

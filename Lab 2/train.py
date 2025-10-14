@@ -25,6 +25,8 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
     losses_test = []
     print(f'Starting training for {n_epochs} epochs...')
     time_start = time.time()
+    min_test_loss = float('inf')
+    min_epoch = -1
     
     for epoch in range(1, n_epochs+1):
         # Training phase
@@ -50,6 +52,14 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
                 outputs = model(imgs)
                 loss = loss_fn(outputs, labels)
                 loss_test += loss.item()
+
+        # Early stopping check
+        if loss_test/len(test_loader) < min_test_loss:
+            min_test_loss = loss_test/len(test_loader)
+            min_epoch = epoch
+        elif epoch - min_epoch >= 5:
+            print(f"Early stopping at epoch {epoch} with minimum test loss {min_test_loss:.4f} at epoch {min_epoch}")
+            break
         
         # Store losses
         losses_train.append(loss_train/len(train_loader))
@@ -73,7 +83,7 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
           sec = s % 60
           return f"{h:02d}:{m:02d}:{sec:02d}"
 
-        print(f"Time Elapsed: {sec_to_hms(elapsed)} | Remaining: {sec_to_hms(remaining)}")
+        print(f"Elapsed: {sec_to_hms(elapsed)} | Left: {sec_to_hms(remaining)} | Per Epoch: {sec_to_hms(avg_per_epoch)}")
 
         if plot_file != None:
             plt.figure(figsize=(12, 7))
