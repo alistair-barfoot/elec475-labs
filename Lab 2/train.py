@@ -21,14 +21,15 @@ batch_size = 32
 plot_file = 'snoutnet_plot.png'
 
 def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, scheduler, device, save_file=None, plot_file=None):
-    model.train()
     losses_train = []
     losses_test = []
     print(f'Starting training for {n_epochs} epochs...')
     time_start = time.time()
+    
     for epoch in range(1, n_epochs+1):
+        # Training phase
+        model.train()
         loss_train = 0.0
-        loss_test = 0.0
         for data, labels in train_loader:
             imgs = data.to(device=device)
             labels = labels.to(device=device)
@@ -38,25 +39,32 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
             loss.backward()
             optimizer.step()
             loss_train += loss.item()
-        scheduler.step(loss_train)
-        losses_train += [loss_train/len(train_loader)]
-
-        for data, labels in test_loader:
-            imgs = data.to(device=device)
-            labels = labels.to(device=device)
-            with torch.no_grad():
+        
+        # Testing phase
+        model.eval()
+        loss_test = 0.0
+        with torch.no_grad():
+            for data, labels in test_loader:
+                imgs = data.to(device=device)
+                labels = labels.to(device=device)
                 outputs = model(imgs)
                 loss = loss_fn(outputs, labels)
                 loss_test += loss.item()
-        losses_test += [loss_test/len(test_loader)]
+        
+        # Store losses
+        losses_train.append(loss_train/len(train_loader))
+        losses_test.append(loss_test/len(test_loader))
+        
+        # Step scheduler with validation loss
+        scheduler.step(losses_test[-1])
 
         if save_file != None:
             torch.save(model.state_dict(), save_file)
 
         print(f"Epoch {epoch}/{n_epochs} | Train Loss: {losses_train[-1]:.4f} | Test Loss: {losses_test[-1]:.4f}")
         elapsed = time.time() - time_start
-        avg_per_epoch = elapsed / (epoch + 1)
-        remaining = avg_per_epoch * (n_epochs - (epoch + 1))
+        avg_per_epoch = elapsed / epoch
+        remaining = avg_per_epoch * (n_epochs - epoch)
 
         def sec_to_hms(s):
           s = int(max(0, s))
@@ -68,9 +76,8 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
         print(f"Time Elapsed: {sec_to_hms(elapsed)} | Remaining: {sec_to_hms(remaining)}")
 
         if plot_file != None:
-            plt.figure(2)
+            plt.figure(figsize=(12, 7))
             plt.clf()
-            plt.gcf().set_size_inches(12, 7)
             plt.plot(losses_train, label='train')
             plt.plot(losses_test, label='test')
             plt.xlabel('Epochs')
@@ -78,10 +85,11 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
             plt.legend()
             plt.grid()
             plt.savefig(plot_file)
+            plt.close()
 
 def init_weights(m):
     if type(m) == nn.Linear:
-        torch.nn.init.xavier_uniform_(m.weight)
+        torch.nn.init.kaiming_normal_(m.weight)
         m.bias.data.fill_(0.01)
 
 def main():
@@ -123,7 +131,7 @@ def main():
     model = snoutNet()
     model = model.to(device)
     model.apply(init_weights)
-    summary(model, (3, 96, 96))
+    summary(model, (3, 227, 227))
 
     transform = transforms.Compose([
         transforms.Resize((227, 227)),
@@ -137,8 +145,8 @@ def main():
     test_set = CustomDataset(test_ann, img_dir, transform=transform)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5)
+    optimizer = optim.Adam(model.parameters(), lr=3e-4, weight_decay=3e-6)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
     loss_fn = nn.MSELoss(size_average=None, reduce=None, reduction='mean')
 
     train(

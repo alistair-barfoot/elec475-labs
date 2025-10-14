@@ -1,7 +1,11 @@
 snoutnet_weights.pth, n_epochs = 30, batch_size = 30, train_loss = 818, no transformations
 snoutnet_weights_A.pth, n_epochs = 20, batch_size = 64, train_loss = 1003, no transformations
 snoutnet_weights_B.pth, n_epochs = 30, batch_size = 16, train_loss = 760, no transformations
-snoutnet_weights_C.pth, n_epochs = 30, batch_size = 256, train_loss = , no transformations
-snoutnet_weights_D.pth, n_epochs = 30, batch_size = 64, train_loss = , no transformations
-snoutnet_weights_E.pth, n_epochs = 30, batch_size = 64, train_loss = , no transformations
-snoutnet_weights_F.pth, n_epochs = 30, batch_size = 128, train_loss = , no transformations
+snoutnet_weights_C.pth, n_epochs = 30, batch_size = 256, train_loss = 1034, no transformations
+snoutnet_weights_D.pth, n_epochs = 30, batch_size = 64, train_loss = 970, no transformations
+snoutnet_weights_E.pth, n_epochs = 30, batch_size = 64, train_loss = 790, no transformations
+snoutnet_weights_F.pth, n_epochs = 30, batch_size = 128, train_loss = 1019, no transformations
+snoutnet_weights_H.pth, n_epochs = 30, batch_size = 16, train_loss = 923, 1/2 learning rate
+snoutnet_weights_I.pth, n_epochs = 30, batch_size = 32, train_loss = 955, 1/2 learning rate
+snoutnet_weights_J.pth, n_epochs = 30, batch_size = 64, train_loss = 989, 1/2 learning rate
+snoutnet_weights_K.pth, n_epochs = 30, batch_size = 128, train_loss = 1011, 1/2 learning rate
