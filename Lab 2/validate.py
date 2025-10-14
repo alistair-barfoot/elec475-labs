@@ -78,6 +78,7 @@ def predict_nose_coordinates(image_path, model_path="models/snoutnet_weights.pth
     img = cv2.imread(image_path)
     x_coord = img.shape[1] * output[0, 0].item() / 227
     y_coord = img.shape[0] * output[0, 1].item() / 227
+    x_coord, y_coord = int(x_coord), int(y_coord)
     
     return x_coord, y_coord
 
@@ -126,6 +127,7 @@ def visualize_prediction(image_path, predicted_coords, ground_truth_coords=None,
     
     # Draw ground truth nose (blue circle) if requested
     if show_ground_truth and ground_truth_coords:
+        ground_truth_coords = (int(ground_truth_coords[0]), int(ground_truth_coords[1]))
         cv2.circle(img, ground_truth_coords, 5, (255, 0, 0), -1)
     
     cv2.imshow("Predicted Nose Position", img)
