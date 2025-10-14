@@ -5,7 +5,8 @@ from torch.utils.data import Dataset
 from model import snoutNet
 import torch
 from PIL import Image
-import torchvision.transforms as transforms
+from torchvision.transforms import v2
+from torchvision import tv_tensors
 
 class CustomDataset(Dataset):
   def __init__(self, annotations_file, img_dir, transform):
@@ -25,44 +26,42 @@ class CustomDataset(Dataset):
       # Get original image dimensions for coordinate scaling
       original_width, original_height = image.size
       
-      # Transform to ensure all images are [3, 227, 227]
-      image = self.transform(image)
-      
-      # Transform coordinates based on image resizing
-      label_str = self.img_labels.iloc[idx, 1]
       # Parse coordinates from string format "(x, y)"
+      label_str = self.img_labels.iloc[idx, 1]
       coords = label_str.strip('()').split(', ')
       original_x = float(coords[0])
       original_y = float(coords[1])
-      
-      # Scale coordinates to match the resized image (227x227)
-      scaled_x = (original_x / original_width) * 227
-      scaled_y = (original_y / original_height) * 227
 
-      # Check whether the transform pipeline contains a RandomHorizontalFlip and, if so, decide/apply a flip to coordinates
-      flip_applied = False
-      transforms_list = []
-      if isinstance(self.transform, transforms.Compose):
-        transforms_list = self.transform.transforms
-      elif isinstance(self.transform, (list, tuple)):
-        transforms_list = list(self.transform)
+      # Convert to tensor and create proper tv_tensors format
+      image = v2.Compose([
+          v2.ToImage(),
+          v2.ToDtype(torch.float32, scale=True)
+      ])(image)
+      
+      # Create bounding box using tv_tensors (this will be transformed correctly)
+      # Format: [x1, y1, x2, y2] - using a small box around the nose point
+      boxes = tv_tensors.BoundingBoxes(
+          [[original_x-0.5, original_y-0.5, original_x+0.5, original_y+0.5]], 
+          format="XYXY", 
+          canvas_size=(original_height, original_width)
+      )
+      
+      # Apply v2 transforms (now they will handle both image and boxes correctly)
+      if self.transform:
+          image, boxes = self.transform(image, boxes)
       else:
-        transforms_list = [self.transform]
-
-      for t in transforms_list:
-        if t.__class__.__name__ == "RandomHorizontalFlip":
-          scaled_x = 227.0 - scaled_x
-        if t.__class__.__name__ == "RandomVerticalFlip":
-          scaled_y = 227.0 - scaled_y
-        if t.__class__.__name__ == "RandomRotation":
-          if t.degrees == 90 or (isinstance(t.degrees, (list, tuple)) and 90 in t.degrees):
-            # For 90 degree rotation, swap x and y coordinates
-            scaled_x, scaled_y = scaled_y, 227.0 - scaled_x
-          elif t.degrees == -90 or (isinstance(t.degrees, (list, tuple)) and -90 in t.degrees):
-            # For 270 degree rotation, swap x and y coordinates
-            scaled_x, scaled_y = 227.0 - scaled_y, scaled_x
+          # Default transform using v2
+          default_transform = v2.Compose([
+              v2.Resize((227, 227)),
+          ])
+          image, boxes = default_transform(image, boxes)
       
-      # Return scaled coordinates as a tensor
-      label = torch.tensor([scaled_x, scaled_y], dtype=torch.float32)
+      # Extract nose coordinates from transformed boxes (center of the box)
+      box = boxes[0]
+      nose_x = (box[0] + box[2]) / 2  # center x
+      nose_y = (box[1] + box[3]) / 2  # center y
+      
+      # Return as tensor
+      label = torch.tensor([nose_x.item(), nose_y.item()], dtype=torch.float32)
       
       return image, label

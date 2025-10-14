@@ -1,7 +1,11 @@
+import random
+import cv2
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision.transforms as transforms
+import numpy as np
+# import torchvision.transforms as transforms
+from torchvision.transforms import v2 as transforms
 import matplotlib.pyplot as plt
 import argparse
 from torch.utils.data import DataLoader
@@ -33,6 +37,16 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
         model.train()
         loss_train = 0.0
         for data, labels in train_loader:
+            if random.random() < 0.001:
+                img = data[0].numpy().transpose(1, 2, 0) * 255
+                img = img.astype('uint8')  # Convert to uint8 for OpenCV
+                img = np.ascontiguousarray(img)  # Make array contiguous
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)  # Convert RGB to BGR for OpenCV
+                nose = (int(labels[0][0].item()), int(labels[0][1].item()))
+                # Make sure coordinates are within image bounds
+                if 0 <= nose[0] < img.shape[1] and 0 <= nose[1] < img.shape[0]:
+                    cv2.circle(img, nose, 5, (0, 255, 0), -1)  # Filled green circle
+                cv2.imwrite('example_debug.png', img)
             imgs = data.to(device=device)
             labels = labels.to(device=device)
             outputs = model(imgs)
@@ -111,6 +125,10 @@ def main():
     argParser.add_argument('-b', metavar='batch size', type=int, help='batch size [32]')
     argParser.add_argument('-p', metavar='plot', type=str, help='output loss plot file (.png)')
 
+    argParser.add_argument('-r', '--reflection', action='store_true', help='use reflection augmentation [False]')
+    argParser.add_argument('-f', '--flip', action='store_true', help='use random flip augmentation [False]')
+    argParser.add_argument('-n', '--noise', action='store_true', help='use random noise augmentation [False]')
+
     args = argParser.parse_args()
 
     save_file = 'snoutnet_weights.pth'
@@ -145,12 +163,30 @@ def main():
 
     transform = transforms.Compose([
         transforms.Resize((227, 227)),
-        transforms.ToTensor(),
-        ],
-    )
+    ])
+
+    if args.flip:
+        transform.transforms.append(transforms.RandomHorizontalFlip(p=0.5))
+        transform.transforms.append(transforms.RandomVerticalFlip(p=0.5))
+    if args.reflection:
+        transform.transforms.append(transforms.RandomRotation(degrees=(-90, 90)))
+    if args.noise:
+        transform.transforms.append(transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.1))
+    transform.transforms.append(transforms.ToImage())
+    transform.transforms.append(transforms.ToDtype(torch.float32, scale=True))
+
+    print("Using transforms:")
+    for t in transform.transforms:
+        print(f" - {t}")
 
     train_set = CustomDataset(train_ann, img_dir, transform=transform)
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+
+    transform = transforms.Compose([
+        transforms.Resize((227, 227)),
+        transforms.ToImage(),
+        transforms.ToDtype(torch.float32, scale=True),
+    ])
 
     test_set = CustomDataset(test_ann, img_dir, transform=transform)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)

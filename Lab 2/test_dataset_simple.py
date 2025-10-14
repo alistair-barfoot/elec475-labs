@@ -2,17 +2,18 @@ import os
 import pandas as pd
 import numpy as np
 import cv2
-from torchvision.transforms import transforms
+from torchvision.transforms import v2
 from dataset import CustomDataset
 
 def test_dataset(start_i=0):
     # Initialize the dataset
-    transform = transforms.Compose([
-        transforms.Resize((227, 227)),
-        # transforms.RandomHorizontalFlip(p=1.0), 
-        transforms.RandomVerticalFlip(p=1.0),
-        # transforms.RandomRotation(degrees=(90,90)),
-        transforms.ToTensor()],
+    transform = v2.Compose([
+        v2.Resize((227, 227)),
+        v2.RandomHorizontalFlip(p=0.5), 
+        v2.RandomVerticalFlip(p=0.5),
+        v2.RandomRotation(degrees=(-90,90)),
+        v2.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.1),
+        v2.ToTensor()],
     )
     
     dataset = CustomDataset(annotations_file='train_noses.txt', img_dir='images', transform=transform)
