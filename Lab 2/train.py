@@ -38,14 +38,10 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
         loss_train = 0.0
         for data, labels in train_loader:
             if random.random() < 0.001:
-                img = data[0].numpy().transpose(1, 2, 0) * 255
-                img = img.astype('uint8')  # Convert to uint8 for OpenCV
-                img = np.ascontiguousarray(img)  # Make array contiguous
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)  # Convert RGB to BGR for OpenCV
+                img = cv2.cvtColor(np.ascontiguousarray((data[0].numpy().transpose(1, 2, 0) * 255).astype('uint8')), cv2.COLOR_RGB2BGR)
                 nose = (int(labels[0][0].item()), int(labels[0][1].item()))
-                # Make sure coordinates are within image bounds
                 if 0 <= nose[0] < img.shape[1] and 0 <= nose[1] < img.shape[0]:
-                    cv2.circle(img, nose, 5, (0, 255, 0), -1)  # Filled green circle
+                    cv2.circle(img, nose, 5, (0, 255, 0), -1)
                 cv2.imwrite('example_debug.png', img)
             imgs = data.to(device=device)
             labels = labels.to(device=device)
@@ -98,6 +94,7 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, test_loader, schedu
           return f"{h:02d}:{m:02d}:{sec:02d}"
 
         print(f"Elapsed: {sec_to_hms(elapsed)} | Left: {sec_to_hms(remaining)} | Per Epoch: {sec_to_hms(avg_per_epoch)}")
+        print("-"*75)
 
         if plot_file != None:
             plt.figure(figsize=(12, 7))
@@ -166,12 +163,12 @@ def main():
     ])
 
     if args.flip:
-        transform.transforms.append(transforms.RandomHorizontalFlip(p=0.5))
-        transform.transforms.append(transforms.RandomVerticalFlip(p=0.5))
+        transform.transforms.append(transforms.RandomHorizontalFlip(p=0.1))
+        transform.transforms.append(transforms.RandomVerticalFlip(p=0.1))
     if args.reflection:
         transform.transforms.append(transforms.RandomRotation(degrees=(-90, 90)))
     if args.noise:
-        transform.transforms.append(transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.1))
+        transform.transforms.append(transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1))
     transform.transforms.append(transforms.ToImage())
     transform.transforms.append(transforms.ToDtype(torch.float32, scale=True))
 
