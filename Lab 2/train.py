@@ -15,7 +15,7 @@ from dataset import CustomDataset
 import time
 
 # Paths
-save_file = 'snoutnet_weights.pth'
+save_file = 'snoutnet_weights_P.pth'
 train_ann = "train_noses.txt"
 test_ann = "test_noses.txt"
 img_dir = "images"
@@ -152,6 +152,8 @@ def main():
     if torch.cuda.is_available():
         device = 'cuda'
         print("Using GPU for training")
+    else :
+        print("Using CPU for training")
     
     model = snoutNet()
     model = model.to(device)
