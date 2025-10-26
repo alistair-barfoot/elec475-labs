@@ -1,12 +1,4 @@
-"""
-AlexNet-backed SnoutNet regression model WITHOUT pretrained ImageNet weights.
 
-Notes:
-- This builds a feature extractor from torchvision.alexnet but does NOT load ImageNet weights.
-- Uses AdaptiveAvgPool2d + small regression head to produce (x, y) outputs.
-- If you want to fine-tune only the head, set freeze_backbone=True.
-- If using pretrained weights in the future, remember to apply ImageNet normalization to inputs.
-"""
 import torch
 import torch.nn as nn
 from torchvision import models
