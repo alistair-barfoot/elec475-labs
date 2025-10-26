@@ -23,7 +23,7 @@ def load_and_preprocess_image(image_path):
     # Load image using PIL
     image = Image.open(image_path).convert("RGB")
     
-    # Define the same transformation as used in the dataset
+    # Resize image and convert to tensor
     transform = transforms.Compose([
         transforms.Resize((227, 227)),  # Resize to 227x227
         transforms.ToTensor()           # Convert to tensor [3, 227, 227]
