@@ -199,109 +199,80 @@ def validate_single_model(model_path, labels, args):
     # Calculate statistics
     if distances:
         mean, std_dev = calculate_statistics(distances)
+        # Find mean, std for 4 worst
+        worst_distances = sorted(distances)[-4:]
+        worst_mean, worst_std_dev = calculate_statistics(worst_distances)
+        worst_min, worst_max = min(worst_distances), max(worst_distances)
+
+        # Find mean, std for 4 best
+        best_distances = sorted(distances)[:4]
+        best_mean, best_std_dev = calculate_statistics(best_distances)
+        best_min, best_max = min(best_distances), max(best_distances)
         return {
             'count': len(distances),
             'mean': mean,
             'std_dev': std_dev,
             'min': min(distances),
-            'max': max(distances)
+            'max': max(distances),
+            'worst_mean': worst_mean,
+            'worst_std_dev': worst_std_dev,
+            'worst_min': worst_min,
+            'worst_max': worst_max,
+            'best_mean': best_mean,
+            'best_std_dev': best_std_dev,
+            'best_min': best_min,
+            'best_max': best_max
         }
     else:
         return None
 
+def report_statistics(modelname, results):
+    print("-"*60)
+    print(f"Results for {modelname}:")
+    print(f"  Overall - Min: {results['min']:3.0f}, Max: {results['max']:3.0f}, Mean: {results['mean']:3.0f}, Stdev: {results['std_dev']:3.1f}")
+    print(f"  Worst 4 - Min: {results['worst_min']:3.0f}, Max: {results['worst_max']:3.0f}, Mean: {results['worst_mean']:3.0f}, Stdev: {results['worst_std_dev']:3.1f}")
+    print(f"  Best 4  - Min: {results['best_min']:3.0f}, Max: {results['best_max']:3.0f}, Mean: {results['best_mean']:3.0f}, Stdev: {results['best_std_dev']:3.1f}")
+    print("-"*60)
+    
 
 def main():
     """Main validation function."""
     parser = argparse.ArgumentParser(description='Validate snoutNet model on test images')
     parser.add_argument('-g', '--ground', action='store_true', 
-                       help='Show ground truth coordinates')
+               help='Show ground truth coordinates')
     parser.add_argument('-v', '--verbose', action='store_true', 
-                       help='Print detailed results for each image')
+               help='Print detailed results for each image')
     parser.add_argument('-s', '--show', action='store_true', 
-                       help='Display images with predicted coordinates')
+               help='Display images with predicted coordinates')
     parser.add_argument('-m', '--model', type=str, default='models/snoutnet_weights.pth',
-                       help='Path to the trained model file')
+               help='Path to the trained model file')
     parser.add_argument('-a', '--all', action='store_true',
-                       help='Validate all .pth files in the models folder')
+               help='Validate all .pth files in the models folder')
     args = parser.parse_args()
 
     # Load ground truth data
     labels = pd.read_csv('test_noses.txt', header=None, names=['filename', 'coordinates'])
 
     if args.all:
-        # Get all .pth files in the models folder
-        model_files = glob.glob('models/*.pth')
-        
-        if not model_files:
-            print("No .pth files found in the models folder.")
-            return
-        
-        print(f"Found {len(model_files)} model files. Validating all models...\n")
-        
-        results_summary = []
-        
-        for model_path in sorted(model_files):
-            model_name = os.path.basename(model_path)
-            print(f"Validating model: {model_name}")
-            
-            try:
-                results = validate_single_model(model_path, labels, args)
-                
-                if results:
-                    print(f"Results for {model_name}:")
-                    print(f"  Count: {results['count']}")
-                    print(f"  Mean: {results['mean']:.1f} pixels")
-                    print(f"  Std Dev: {results['std_dev']:.1f} pixels")
-                    print(f"  Min: {results['min']:.1f} pixels")
-                    print(f"  Max: {results['max']:.1f} pixels")
-                    
-                    results_summary.append({
-                        'model': model_name,
-                        'mean': results['mean'],
-                        'std_dev': results['std_dev'],
-                        'count': results['count'],
-                        'min': results['min'],
-                        'max': results['max']
-                    })
-                else:
-                    print(f"  No valid results for {model_name}")
-                    
-            except Exception as e:
-                print(f"  Error validating {model_name}: {e}")
-            
-            print("-" * 60)
-        
-        # Print summary comparison
-        if results_summary:
-            print("\nSUMMARY COMPARISON:")
-            print("=" * 80)
-            print(f"{'Model':<30} {'Mean':<10} {'Std Dev':<10} {'Min':<10} {'Max':<10} ")
-            print("-" * 80)
-            
-            # Sort by mean error (best first)
-            results_summary.sort(key=lambda x: x['mean'])
-            
-            for result in results_summary:
-                print(f"{result['model']:<30} {result['mean']:<10.1f} {result['std_dev']:<10.1f} {result['min']:<10.1f} {result['max']:<10.1f}")
-            print(f"\nBest performing model: {results_summary[0]['model']} (Mean: {results_summary[0]['mean']:.1f} pixels)")
-    
+      # Get all .pth files in the models folder
+      model_files = glob.glob('models/*.pth')
+      if not model_files:
+        print("No .pth files found in the models folder.")
+        return
+      print(f"Found {len(model_files)} model files. Validating all models...\n")
     else:
-        # Single model validation (original behavior)
-        model_path = args.model
-        
-        print(f"Validating single model: {os.path.basename(model_path)}")
-        
-        results = validate_single_model(model_path, labels, args)
-        
-        if results:
-            print(f"\nValidation Results:")
-            print(f"Count: {results['count']}")
-            print(f"Mean: {results['mean']:.1f} pixels")
-            print(f"Std Dev: {results['std_dev']:.1f} pixels")
-            print(f"Min: {results['min']:.1f} pixels")
-            print(f"Max: {results['max']:.1f} pixels")
-        else:
-            print("No valid images found for validation.")
+      model_files = [args.model]
+
+    for model_path in sorted(model_files):
+      model_name = os.path.basename(model_path)
+      print(f"Validating model: {model_name}")
+      
+      results = validate_single_model(model_path, labels, args)
+      
+      if results:
+        report_statistics(os.path.basename(model_path), results)
+      else:
+        print("No valid images found for validation.")
 
 
 if __name__ == "__main__":
