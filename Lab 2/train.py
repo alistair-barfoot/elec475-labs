@@ -14,8 +14,10 @@ from model import snoutNet
 from dataset import CustomDataset
 import time
 
+import torchvision.models as ptmodels
+
 # Paths
-save_file = 'snoutnet_weights.pth'
+save_file = 'snoutnet_weights_P.pth'
 train_ann = "train_noses.txt"
 test_ann = "test_noses.txt"
 img_dir = "images"
@@ -122,9 +124,11 @@ def main():
     argParser.add_argument('-b', metavar='batch size', type=int, help='batch size [32]')
     argParser.add_argument('-p', metavar='plot', type=str, help='output loss plot file (.png)')
 
+    argParser.add_argument('-a', '--alexnet', action='store_true', help='use AlexNet model [False]')
+    argParser.add_argument('-v', '--vgg', action='store_true', help='use VGG model [False]')
+
     argParser.add_argument('-r', '--reflection', action='store_true', help='use reflection augmentation [False]')
     argParser.add_argument('-f', '--flip', action='store_true', help='use random flip augmentation [False]')
-    argParser.add_argument('-n', '--noise', action='store_true', help='use random noise augmentation [False]')
 
     args = argParser.parse_args()
 
@@ -154,23 +158,28 @@ def main():
         print("Using GPU for training")
     else :
         print("Using CPU for training")
-    
-    model = snoutNet()
-    model = model.to(device)
-    model.apply(init_weights)
-    summary(model, (3, 227, 227))
 
     transform = transforms.Compose([
         transforms.Resize((227, 227)),
     ])
 
+    if args.alexnet:
+        print("Using AlexNet model")
+        model = ptmodels.alexnet(weights=ptmodels.AlexNet_Weights.IMAGENET1K_V1)
+        model.classifier[6] = nn.Linear(model.classifier[6].in_features, 2)
+    elif args.vgg:
+        print("Using VGG model")
+        model = ptmodels.vgg16(weights=ptmodels.VGG16_Weights.IMAGENET1K_V1)
+        model.classifier[6] = nn.Linear(model.classifier[6].in_features, 2)
+    else:
+        model = snoutNet()
+        model.apply(init_weights)
+    model = model.to(device)
+    summary(model, (3, 227, 227))
     if args.flip:
         transform.transforms.append(transforms.RandomHorizontalFlip(p=0.1))
-        transform.transforms.append(transforms.RandomVerticalFlip(p=0.1))
     if args.reflection:
-        transform.transforms.append(transforms.RandomRotation(degrees=(-10, 10)))
-    if args.noise:
-        transform.transforms.append(transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1))
+        transform.transforms.append(transforms.RandomRotation(degrees=(-90, 90)))
     transform.transforms.append(transforms.ToImage())
     transform.transforms.append(transforms.ToDtype(torch.float32, scale=True))
 
@@ -190,7 +199,7 @@ def main():
     test_set = CustomDataset(test_ann, img_dir, transform=transform)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
-    optimizer = optim.Adam(model.parameters(), lr=2e-4, weight_decay=2e-6)
+    optimizer = optim.Adam(model.parameters(), lr=3e-4, weight_decay=3e-6)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
     loss_fn = nn.MSELoss(size_average=None, reduce=None, reduction='mean')
 
