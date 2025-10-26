@@ -15,7 +15,7 @@ from dataset import CustomDataset
 import time
 
 # Paths
-save_file = 'snoutnet_weights_P.pth'
+save_file = 'snoutnet_weights.pth'
 train_ann = "train_noses.txt"
 test_ann = "test_noses.txt"
 img_dir = "images"
@@ -168,7 +168,7 @@ def main():
         transform.transforms.append(transforms.RandomHorizontalFlip(p=0.1))
         transform.transforms.append(transforms.RandomVerticalFlip(p=0.1))
     if args.reflection:
-        transform.transforms.append(transforms.RandomRotation(degrees=(-90, 90)))
+        transform.transforms.append(transforms.RandomRotation(degrees=(-10, 10)))
     if args.noise:
         transform.transforms.append(transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1))
     transform.transforms.append(transforms.ToImage())
@@ -190,7 +190,7 @@ def main():
     test_set = CustomDataset(test_ann, img_dir, transform=transform)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
-    optimizer = optim.Adam(model.parameters(), lr=3e-4, weight_decay=3e-6)
+    optimizer = optim.Adam(model.parameters(), lr=2e-4, weight_decay=2e-6)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
     loss_fn = nn.MSELoss(size_average=None, reduce=None, reduction='mean')
 
