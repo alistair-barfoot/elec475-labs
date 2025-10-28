@@ -1,12 +1,12 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.9.11)  27 OCT 2025 18:57
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.9.28)  28 OCT 2025 18:47
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
  %&-line parsing enabled.
-**"c:/Users/aliwi/OneDrive - Queen's University/F25 Courses/ELEC 475/Labs/Lab 2/report/ELEC475_Lab2Report"
-(c:/Users/aliwi/OneDrive - Queen's University/F25 Courses/ELEC 475/Labs/Lab 2/report/ELEC475_Lab2Report.tex
+**"c:/Users/Alistair Barfoot/OneDrive - Queen's University/F25 Courses/ELEC 475/Labs/Lab 2/report/ELEC475_Lab2Report"
+(c:/Users/Alistair Barfoot/OneDrive - Queen's University/F25 Courses/ELEC 475/Labs/Lab 2/report/ELEC475_Lab2Report.tex
 LaTeX2e <2025-06-01> patch level 1
-L3 programming layer <2025-08-13>
+L3 programming layer <2025-09-02>
 (c:/texlive/2025/texmf-dist/tex/latex/base/article.cls
 Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
 (c:/texlive/2025/texmf-dist/tex/latex/base/size11.clo
@@ -563,13 +563,13 @@ File: biblatex.cfg
 Package biblatex Info: Input encoding 'utf8' detected.
 Package biblatex Info: Document encoding is UTF8 ....
  (c:/texlive/2025/texmf-dist/tex/latex/l3kernel/expl3.sty
-Package: expl3 2025-08-13 L3 programming layer (loader) 
+Package: expl3 2025-09-02 L3 programming layer (loader) 
  (c:/texlive/2025/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def
 File: l3backend-pdftex.def 2025-06-09 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count453
 ))
 Package biblatex Info: ... and expl3
-(biblatex)             2025-08-13 L3 programming layer (loader) 
+(biblatex)             2025-09-02 L3 programming layer (loader) 
 (biblatex)             is new enough (at least 2020/04/06),
 (biblatex)             setting 'casechanger=expl3'.
  (c:/texlive/2025/texmf-dist/tex/latex/biblatex/blx-case-expl3.sty (c:/texlive/2025/texmf-dist/tex/latex/l3packages/xparse/xparse.sty
@@ -793,28 +793,60 @@ Underfull \hbox (badness 10000) in paragraph at lines 97--100
 
 
 [2]
-Overfull \hbox (42.67262pt too wide) in paragraph at lines 111--141
- [][] 
+Underfull \hbox (badness 10000) in paragraph at lines 103--106
+
  []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 109--112
+
+ []
+
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
 
 
 
 [3{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-rm.enc}{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-mathsy.enc}]
-Underfull \hbox (badness 10000) in paragraph at lines 184--189
+Underfull \hbox (badness 10000) in paragraph at lines 193--198
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 184--189
+Underfull \hbox (badness 10000) in paragraph at lines 193--198
+
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 193--198
 
  []
 
 
 
-[4] (./ELEC475_Lab2Report.aux)
+[4]
+Underfull \hbox (badness 10000) in paragraph at lines 201--202
+
+ []
+
+
+
+[5]
+Underfull \hbox (badness 10000) in paragraph at lines 206--211
+
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 206--211
+
+ []
+
+
+
+[6] (./ELEC475_Lab2Report.aux)
  ***********
 LaTeX2e <2025-06-01> patch level 1
-L3 programming layer <2025-08-13>
+L3 programming layer <2025-09-02>
  ***********
 Package rerunfilecheck Info: File `ELEC475_Lab2Report.out' has not changed.
 (rerunfilecheck)             Checksum: E497B3C1CDA60A0B9F6EC48FEA81E5E9;924.
@@ -823,18 +855,18 @@ Package logreq Info: Writing requests to 'ELEC475_Lab2Report.run.xml'.
 
  ) 
 Here is how much of TeX's memory you used:
- 23443 strings out of 467800
- 415652 string characters out of 5436055
- 1600516 words of memory out of 5000000
- 51805 multiletter control sequences out of 15000+600000
- 658464 words of font info for 65 fonts, out of 8000000 for 9000
+ 23447 strings out of 467747
+ 415726 string characters out of 5431117
+ 1618594 words of memory out of 5000000
+ 51859 multiletter control sequences out of 15000+600000
+ 659360 words of font info for 65 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 79i,11n,80p,1277b,3950s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 79i,11n,80p,1288b,3950s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmbx10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmbx12.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmr10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmr8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmsy10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmsy8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmtt10.pfb>
-Output written on ELEC475_Lab2Report.pdf (4 pages, 154171 bytes).
+Output written on ELEC475_Lab2Report.pdf (6 pages, 161082 bytes).
 PDF statistics:
- 113 PDF objects out of 1000 (max. 8388607)
- 91 compressed objects within 1 object stream
- 15 named destinations out of 1000 (max. 500000)
+ 124 PDF objects out of 1000 (max. 8388607)
+ 100 compressed objects within 1 object stream
+ 18 named destinations out of 1000 (max. 500000)
  65 words of extra memory for PDF output out of 10000 (max. 10000000)
 
