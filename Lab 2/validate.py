@@ -8,7 +8,7 @@ import numpy as np
 import argparse
 import pandas as pd
 import glob
-
+import torchvision.models as ptmodels
 
 def load_and_preprocess_image(image_path):
     """
@@ -38,22 +38,73 @@ def load_and_preprocess_image(image_path):
 
 def load_model(model_path):
     """
-    Load the trained snoutNet model from file.
-    
+    Load a model from a checkpoint file. The function infers model type from the
+    filename (alex/vgg/snout) and attempts to handle several common checkpoint formats.
+
     Args:
         model_path (str): Path to the model file
-        
+
     Returns:
         torch.nn.Module: Loaded model in evaluation mode
     """
-    model = snoutNet()
-    
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
-    
-    model.load_state_dict(torch.load(model_path, map_location='cpu'))
+
+    name = os.path.basename(model_path).lower()
+    # Infer architecture from filename
+    if 'alex' in name:
+        model = ptmodels.alexnet(weights=None)
+        model.classifier[6] = torch.nn.Linear(model.classifier[6].in_features, 2)
+    elif 'vgg' in name:
+        model = ptmodels.vgg16(weights=None)
+        model.classifier[6] = torch.nn.Linear(model.classifier[6].in_features, 2)
+    else:
+        model = snoutNet()
+
+    # Load checkpoint and handle common wrappers
+    ckpt = torch.load(model_path, map_location='cpu')
+
+    # If checkpoint is a dict, try common keys
+    if isinstance(ckpt, dict):
+        # common containers
+        for key in ('state_dict', 'model_state', 'model', 'weights'):
+            if key in ckpt and isinstance(ckpt[key], dict):
+                sd = ckpt[key]
+                try:
+                    model.load_state_dict(sd)
+                except Exception:
+                    model.load_state_dict(sd, strict=False)
+                model.eval()
+                return model
+        # If dict looks like a state_dict (tensor values), try directly
+        if all(isinstance(v, torch.Tensor) for v in ckpt.values()): 
+            try:
+                model.load_state_dict(ckpt)
+            except Exception:
+                model.load_state_dict(ckpt, strict=False)
+            model.eval()
+            return model
+
+        # Last resort: try to find nested dict that looks like state_dict
+        for v in ckpt.values():
+            if isinstance(v, dict) and all(isinstance(x, torch.Tensor) for x in v.values()):
+                try:
+                    model.load_state_dict(v)
+                except Exception:
+                    model.load_state_dict(v, strict=False)
+                model.eval()
+                return model
+
+        raise RuntimeError('Unrecognized checkpoint format for file: ' + model_path)
+
+    else:
+        # Not a dict – unexpected, but try to treat as state_dict anyway
+        try:
+            model.load_state_dict(ckpt)
+        except Exception as e:
+            raise RuntimeError(f'Failed to load checkpoint: {e}')
+
     model.eval()
-    
     return model
 
 
@@ -245,23 +296,67 @@ def main():
     parser.add_argument('-s', '--show', action='store_true', 
                help='Display images with predicted coordinates')
     parser.add_argument('-m', '--model', type=str, default='models/snoutnet_weights.pth',
-               help='Path to the trained model file')
+               help='Path to the trained model file (or model name: alex/vgg/snout)')
+    parser.add_argument('-t', '--type', type=str, default='any', choices=['alex', 'vgg', 'snout', 'any'],
+               help="Model type filter to use when validating multiple files: 'alex', 'vgg', 'snout' or 'any'")
     parser.add_argument('-a', '--all', action='store_true',
-               help='Validate all .pth files in the models folder')
+               help='Validate all .pth files in the models folder (filtered by --type)')
     args = parser.parse_args()
 
     # Load ground truth data
     labels = pd.read_csv('test_noses.txt', header=None, names=['filename', 'coordinates'])
 
+    device = 'cpu'
+    if torch.cuda.is_available():
+        device = 'cuda'
+        print("Using GPU for validation")
+    else :
+        print("Using CPU for validation")
+
+    # Build the list of model files to validate.
     if args.all:
-      # Get all .pth files in the models folder
-      model_files = glob.glob('models/*.pth')
-      if not model_files:
-        print("No .pth files found in the models folder.")
-        return
-      print(f"Found {len(model_files)} model files. Validating all models...\n")
+        # Gather all .pth files then filter by selected type
+        all_files = glob.glob('models/*.pth')
+        if not all_files:
+            print("No .pth files found in the models folder.")
+            return
+
+        if args.type == 'any':
+            model_files = all_files
+        else:
+            type_map = {
+                'alex': ['alex'],
+                'vgg': ['vgg'],
+                'snout': ['sw', 'snout', 'snoutnet']
+            }
+            substrings = type_map.get(args.type, [])
+            # case-insensitive match on filename
+            model_files = [f for f in all_files if any(s in os.path.basename(f).lower() for s in substrings)]
+
+        if not model_files:
+            print(f"No .pth files matching type '{args.type}' found in models folder.")
+            return
+
+        print(f"Found {len(model_files)} model files matching type '{args.type}'. Validating...\n")
     else:
-      model_files = [args.model]
+        # If user passed a model name instead of a path (e.g. 'alex', 'vgg', 'snout'), try to resolve
+        if not os.path.exists(args.model) and args.model.lower() in ('alex', 'vgg', 'snout'):
+            name = args.model.lower()
+            type_map = {
+                'alex': ['alex'],
+                'vgg': ['vgg'],
+                'snout': ['sw', 'snout', 'snoutnet']
+            }
+            substrings = type_map.get(name, [])
+            candidates = [f for f in glob.glob('models/*.pth') if any(s in os.path.basename(f).lower() for s in substrings)]
+            if not candidates:
+                print(f"No .pth files found for model type '{name}' in models folder.")
+                return
+            # Use the latest modified candidate by default
+            model_files = [max(candidates, key=os.path.getmtime)]
+            print(f"Resolved model name '{args.model}' to file: {model_files[0]}")
+        else:
+            model_files = [args.model]
 
     for model_path in sorted(model_files):
       model_name = os.path.basename(model_path)

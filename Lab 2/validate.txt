@@ -1,0 +1,92 @@
+Found 4 model files matching type 'vgg'. Validating...
+
+Validating model: vgg_BOTH_AUG.pth
+------------------------------------------------------------
+Results for vgg_BOTH_AUG.pth:
+  Overall - Min:   0, Max: 110, Mean:   9, Stdev: 11.1
+  Worst 4 - Min:  84, Max: 110, Mean:  94, Stdev: 9.8
+  Best 4  - Min:   0, Max:   1, Mean:   0, Stdev: 0.1
+------------------------------------------------------------
+Validating model: vgg_FLIP_AUG.pth
+------------------------------------------------------------
+Results for vgg_FLIP_AUG.pth:
+  Overall - Min:   0, Max:  88, Mean:  10, Stdev: 9.3
+  Worst 4 - Min:  71, Max:  88, Mean:  82, Stdev: 6.3
+  Best 4  - Min:   0, Max:   1, Mean:   1, Stdev: 0.2
+------------------------------------------------------------
+Validating model: vgg_NO_AUG.pth
+------------------------------------------------------------
+Results for vgg_NO_AUG.pth:
+  Overall - Min:   0, Max: 107, Mean:  10, Stdev: 13.3
+  Worst 4 - Min:  84, Max: 107, Mean:  96, Stdev: 9.7
+  Best 4  - Min:   0, Max:   0, Mean:   0, Stdev: 0.2
+------------------------------------------------------------
+Validating model: vgg_ROT_AUG.pth
+------------------------------------------------------------
+Results for vgg_ROT_AUG.pth:
+  Overall - Min:   1, Max: 120, Mean:   9, Stdev: 10.0
+  Worst 4 - Min:  80, Max: 120, Mean:  93, Stdev: 15.7
+  Best 4  - Min:   1, Max:   1, Mean:   1, Stdev: 0.1
+------------------------------------------------------------
+
+Found 4 model files matching type 'alex'. Validating...
+
+Validating model: alex_BOTH_AUG.pth
+------------------------------------------------------------
+Results for alex_BOTH_AUG.pth:
+  Overall - Min:   0, Max: 116, Mean:  10, Stdev: 11.1
+  Worst 4 - Min:  68, Max: 116, Mean:  85, Stdev: 18.4
+  Best 4  - Min:   0, Max:   0, Mean:   0, Stdev: 0.2
+------------------------------------------------------------
+Validating model: alex_FLIP_AUG.pth
+------------------------------------------------------------
+Results for alex_FLIP_AUG.pth:
+  Overall - Min:   0, Max:  99, Mean:  13, Stdev: 12.5
+  Worst 4 - Min:  73, Max:  99, Mean:  88, Stdev: 10.0
+  Best 4  - Min:   0, Max:   1, Mean:   1, Stdev: 0.1
+------------------------------------------------------------
+Validating model: alex_NO_AUG.pth
+------------------------------------------------------------
+Results for alex_NO_AUG.pth:
+  Overall - Min:   0, Max: 117, Mean:  14, Stdev: 13.4
+  Worst 4 - Min:  82, Max: 117, Mean:  94, Stdev: 13.5
+  Best 4  - Min:   0, Max:   1, Mean:   1, Stdev: 0.1
+------------------------------------------------------------
+Validating model: alex_ROT_AUG.pth
+------------------------------------------------------------
+Results for alex_ROT_AUG.pth:
+  Overall - Min:   0, Max: 111, Mean:  10, Stdev: 12.7
+  Worst 4 - Min:  71, Max: 111, Mean:  93, Stdev: 14.5
+  Best 4  - Min:   0, Max:   1, Mean:   0, Stdev: 0.2
+------------------------------------------------------------
+
+Found 4 model files matching type 'snout'. Validating...
+
+Validating model: sw_BOTH_AUG.pth
+------------------------------------------------------------
+Results for sw_BOTH_AUG.pth:
+  Overall - Min:   0, Max: 140, Mean:  23, Stdev: 18.1
+  Worst 4 - Min: 103, Max: 140, Mean: 123, Stdev: 13.7
+  Best 4  - Min:   0, Max:   2, Mean:   1, Stdev: 0.6
+------------------------------------------------------------
+Validating model: sw_FLIP_AUG.pth
+------------------------------------------------------------
+Results for sw_FLIP_AUG.pth:
+  Overall - Min:   1, Max: 132, Mean:  26, Stdev: 19.2
+  Worst 4 - Min: 109, Max: 132, Mean: 119, Stdev: 9.3
+  Best 4  - Min:   1, Max:   2, Mean:   1, Stdev: 0.4
+------------------------------------------------------------
+Validating model: sw_NO_AUG.pth
+------------------------------------------------------------
+Results for sw_NO_AUG.pth:
+  Overall - Min:   1, Max: 145, Mean:  26, Stdev: 19.3
+  Worst 4 - Min: 106, Max: 145, Mean: 122, Stdev: 16.4
+  Best 4  - Min:   1, Max:   2, Mean:   1, Stdev: 0.4
+------------------------------------------------------------
+Validating model: sw_ROT_AUG.pth
+------------------------------------------------------------
+Results for sw_ROT_AUG.pth:
+  Overall - Min:   1, Max: 171, Mean:  24, Stdev: 19.5
+  Worst 4 - Min: 113, Max: 171, Mean: 136, Stdev: 22.1
+  Best 4  - Min:   1, Max:   1, Mean:   1, Stdev: 0.2
+------------------------------------------------------------
