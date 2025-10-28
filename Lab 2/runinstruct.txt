@@ -1,0 +1,1 @@
+py ./ali_ensemble.py -x models/sw_NO_AUG.pth -y models/alex_NO_AUG.pth -z models/vgg_NO_AUG.pth -s -g -v
