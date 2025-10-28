@@ -1,0 +1,191 @@
+% DOCUMENT SETUP
+\documentclass[letterpaper,11pt,twoside]{article}
+\hyphenpenalty=8000
+\textwidth=125mm
+\textheight=200mm
+\usepackage[top=3cm, bottom=3cm, inner=3cm, outer=3cm, includehead]{geometry}
+\usepackage{fancyhdr}
+\setlength{\headheight}{13.6pt} % Fix for fancyhdr warning
+\addtolength{\topmargin}{-1.6pt} % Optional: further fix as suggested
+\pagestyle{fancy}
+\fancyhead{}
+\fancyfoot{}
+\raggedbottom
+\usepackage{xurl}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{alltt}
+\usepackage{amsmath}
+\usepackage[pdftex, linkcolor=blue]{hyperref}
+\urlstyle{same}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{csquotes}
+\usepackage[notes, backend=biber]{biblatex-chicago}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\graphicspath{{./imgs/}}
+\usepackage[english]{babel}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{fancyvrb}
+%\usepackage[french]{babel}
+%\usepackage[spanish]{babel}
+
+% AUTHOR AND TITLE
+\begin{document}
+\fancyhead[RO]{ELEC 475 Lab 2, Alistair Barfoot and Luke Barry\ \ \ \ \thepage}
+\begin{center}
+  \LARGE
+  \textbf{ELEC 475 Lab 2, Alistair Barfoot and Luke Barry}\\[12pt]
+  \normalsize
+\end{center}
+\tableofcontents
+
+\newpage
+
+\section{Network Architecture}
+SnoutNet is a Convolutional Neural Network designed for regressing the (x,y) coordinates of an animal's nose from a RGB image. It takes an input image of 227x227x3 and outputs a 2D coordinate vector. It is comprised of three convolutional blocks each followed by a ReLU activation and a Max Pooling layer, then three fully connected (FC) layers.
+
+\begin{table}[h]
+  \centering
+  % \resizebox{\linewidth}{!}{
+  \begin{tabularx}{\linewidth}{|c|c|c|X|}
+    \hline
+    \textbf{Layer}    & \textbf{Input Shape} & \textbf{Output Size} & \textbf{Parameters}                                                                                      \\
+    \hline
+    \textbf{Conv1}    & 227x227x3            & 114x114x64           & \verb+in_channels=3+, \verb+out_channels=64+, \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+    \\
+    \hline
+    \textbf{ReLU1}    & 114x114x64           & 114x114x64           &                                                                                                          \\
+    \hline
+    \textbf{MaxPool1} & 114x114x64           & 57x57x64             & \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+                                                  \\
+    \hline
+    \textbf{Conv2}    & 57x57x64             & 29x29x128            & \verb+in_channels=64+, \verb+out_channels=128+, \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+  \\
+    \hline
+    \textbf{ReLU2}    & 29x29x128            & 29x29x128            &                                                                                                          \\
+    \hline
+    \textbf{MaxPool2} & 29x29x128            & 15x15x128            & \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+                                                  \\
+    \hline
+    \textbf{Conv3}    & 15x15x128            & 8x8x256              & \verb+in_channels=128+, \verb+out_channels=256+, \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+ \\
+    \hline
+    \textbf{ReLU3}    & 8x8x256              & 8x8x256              &                                                                                                          \\
+    \hline
+    \textbf{MaxPool3} & 8x8x256              & 4x4x256              & \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+                                                  \\
+    \hline
+    \textbf{FC1}      & 4x4x256(4096)        & 1024                 &                                                                                                          \\
+    \hline
+    \textbf{ReLU4}    & 1024                 & 1024                 &                                                                                                          \\
+    \hline
+    \textbf{FC2}      & 1024                 & 1024                 &                                                                                                          \\
+    \hline
+    \textbf{ReLU5}    & 1024                 & 1024                 &                                                                                                          \\
+    \hline
+    \textbf{FC3}      & 1024                 & 2 (u,v)              &                                                                                                          \\
+    \hline
+  \end{tabularx}
+  % }
+\end{table}
+
+\section{DataLoader and Dataset}
+The images and labels are loaded through a custom pytorch dataset class called CustomDataset, which reads the annotation file train-noses.txt containing image file names and their corresponding coordinates to their noses. For each entry the dataset loads the image and converts it to an RGB format and parses the coordinate string to numerical values. Images are resized to 227x227 pixels and the transformed nose coordinates are returned as a vector.\\
+\\
+A factcheck was performed by creating a small test script that loads a sample and prints the shapes and values. Throughout each train an \verb+example_debug.png+ image will appear one in every thousand images with the image and its corresponding snout vector. This ensures that the dataset is loading correctly each time with the augmentation applied.
+
+\section{Hyperparameters}
+The SnoutNet model was trained for 50 epochs with a batch size of 32 using the Adam optimizer. The learning rate scheduler is applied to monitor validation loss and reduces the learning rate by a factor of 2 if no improvement has been observed in 3 consecutive epochs. Early stopping is also implemented if no test loss improvement has been observed for 5 epochs. The learning rate was set to $3\times10^{-4}$ and a weight decay of $1\times10^{-4}$. \\
+\\
+The training was conducted on a NVIDIA RTX 3060 Super laptop edition. Each Epoch took approximately 35 seconds resulting in a max time of approximately 30 minutes for all 50 epochs to be ran.
+
+
+\section{Augmentation}
+Data augmentation was optionally applied to the training. A horizontal flip to simulate mirrored images was applied as well as a random rotation of $\pm10 ^{\circ}$ to provide rotational variance. For both horizontal flip and a random rotation, the label for the nose vector needed to be adjusted, since the images position within the frame changed the snout of each animal would have changed in position too.
+
+
+\section{Results}
+
+\begin{table}[h]
+  \centering
+  %\resizebox{\linewidth}{!}{
+  \begin{tabular}{|c|c|c|c|c|c|}
+    \hline
+    \textbf{Model}              & \textbf{Augmentation} & \textbf{Epochs} & \textbf{Train Loss} & \textbf{Test Loss} & \textbf{Time Elapsed (hh:mm)} \\
+    \hline
+    \multirow{4}{*}{SnoutNet}   & None                  & 26              & 208                 & 487                &                               \\
+    \cline{2-6}
+                                & Flip                  & 26              & 359                 & 532                &                               \\
+    \cline{2-6}
+                                & Rotate                & 33              & 284                 & 461                &                               \\
+    \cline{2-6}
+                                & Flip + Rotate         & 50              & 401                 & 419                &                               \\
+    \hline
+    \multirow{4}{*}{SnoutNet-A} & None                  &                 &                     &                                                    \\
+    \cline{2-6}
+                                & Flip                  &               &                     &                                                    \\
+    \cline{2-6}
+                                & Rotate                &               &                     &                                                    \\
+    \cline{2-6}
+                                & Flip + Rotate         &               &                     &                                                    \\
+    \hline
+    \multirow{4}{*}{SnoutNet-V} & None                  &               &                     &                                                    \\
+    \cline{2-6}
+                                & Flip                  &               &                     &                                                    \\
+    \cline{2-6}
+                                & Rotate                &               &                     &                                                    \\
+    \cline{2-6}
+                                & Flip + Rotate         &               &                     &                                                    \\
+    \hline
+  \end{tabular}
+  %}
+\end{table}
+
+\begin{table}[htbp]
+  \centering
+  \resizebox{\linewidth}{!}{
+    \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|c|}
+      \hline
+      \multirow{2}{*}{Model}      & \multirow{2}{*}{Augmentation} & \multicolumn{4}{|c|}{Localization Error} & \multicolumn{4}{|c|}{Localization Error (4 Best)} & \multicolumn{4}{|c|}{Localization Error (4 Worst)}                                                               \\
+      \cline{3-14}
+                                  &                               & min                                      & max                                               & mean                                               & stdev & min & max & mean & stdev & min & max & mean & stdev \\
+      \hline
+      \multirow{2}{*}{SnoutNet}   &                               &                                          &                                                   &                                                    &       &     &     &      &       &     &     &      &       \\
+      \cline{2-14}
+                                  & x                             &                                          &                                                   &                                                    &       &     &     &      &       &     &     &      &       \\
+
+      \hline
+      \multirow{2}{*}{SnoutNet-A} &                               &                                          &                                                   &                                                    &       &     &     &      &       &     &     &      &       \\
+      \cline{2-14}
+                                  & x                             &                                          &                                                   &                                                    &       &     &     &      &       &     &     &      &       \\
+      \hline
+      \multirow{2}{*}{SnoutNet-V} &                               &                                          &                                                   &                                                    &       &     &     &      &       &     &     &      &       \\
+      \cline{2-14}
+                                  & x                             &                                          &                                                   &                                                    &       &     &     &      &       &     &     &      &       \\
+      \hline
+      SnoutNet-                   &                               &                                          &                                                   &                                                    &       &     &     &      &       &     &     &      &       \\
+      \cline{2-14}
+      Ensemble                    & x                             &                                          &                                                   &                                                    &       &     &     &      &       &     &     &      &       \\
+      \hline
+    \end{tabular}%
+  }
+  \caption{Localization error statistics for each model and augmentation strategy.}
+  \label{tab:localization_error_stats}
+\end{table}
+
+\section{Performance}
+% Discuss the performance of your system. How well did it perform? Was the performance as expected? Discuss which (if any) of the augmentation methods were beneficial. What challenges did you experience, and how did you overcome them?
+
+\section{Ensemble Approach}
+% Describe how your ensemble approach combined the infromation from the three models. Discuss how this impacted performance.
+
+\newpage
+\section{LLM Usage}
+% Share the link to your conversation with LLM of your choice (e.g., ChatGPT, Claude, etc.). How did you make sure that code or concepts generated by LLM were not hallucinations?
+\textbf{\href{https://github.com/copilot/share/88025032-03a4-8871-b803-a44664ab6910}{Link to LLM Conversation}}\\
+\\
+For this lab, GitHub Copilot was used to assist in generating the structure of the SnoutNet dataset and DataLoader classes. However, the code generated by the LLM was not just copied and ran in the project. Instead, each line of the code generated by the LLM was carefully reveiewed and tested to ensure that it functioned as intended. \\
+\\
+Debugging files and lines were added at every step of the process to ensure that each part was functioning correctly and as predicted. In the final version of the lab, much of the code generated by the LLM has been modified or removed entirely as it was not taken just at face value.
+
+
+\end{document}
