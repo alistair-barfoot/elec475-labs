@@ -1,10 +1,10 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.9.11)  27 OCT 2025 15:26
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.9.11)  27 OCT 2025 18:57
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
  %&-line parsing enabled.
-**"c:/Users/aliwi/OneDrive - Queen's University/F25 Courses/ELEC 475/Labs/Lab 1/ELEC475_Lab1Report"
-(c:/Users/aliwi/OneDrive - Queen's University/F25 Courses/ELEC 475/Labs/Lab 1/ELEC475_Lab1Report.tex
+**"c:/Users/aliwi/OneDrive - Queen's University/F25 Courses/ELEC 475/Labs/Lab 2/report/ELEC475_Lab2Report"
+(c:/Users/aliwi/OneDrive - Queen's University/F25 Courses/ELEC 475/Labs/Lab 2/report/ELEC475_Lab2Report.tex
 LaTeX2e <2025-06-01> patch level 1
 L3 programming layer <2025-08-13>
 (c:/texlive/2025/texmf-dist/tex/latex/base/article.cls
@@ -603,35 +603,68 @@ Package babel Info: Hyphen rules for 'australian' set to \l@ukenglish
 (babel)             (\language22). Reported on input line 105.
 Package babel Info: Hyphen rules for 'newzealand' set to \l@ukenglish
 (babel)             (\language22). Reported on input line 108.
-))
+)) (c:/texlive/2025/texmf-dist/tex/latex/multirow/multirow.sty
+Package: multirow 2024/11/12 v2.9 Span multiple rows of a table
+\multirow@colwidth=\skip96
+\multirow@cntb=\count456
+\multirow@dima=\skip97
+\bigstrutjot=\dimen183
+) (c:/texlive/2025/texmf-dist/tex/latex/tools/tabularx.sty
+Package: tabularx 2023/12/11 v2.12a `tabularx' package (DPC)
+ (c:/texlive/2025/texmf-dist/tex/latex/tools/array.sty
+Package: array 2025/06/08 v2.6j Tabular extension package (FMi)
+\col@sep=\dimen184
+\ar@mcellbox=\box56
+\extrarowheight=\dimen185
+\NC@list=\toks29
+\extratabsurround=\skip98
+\backup@length=\skip99
+\ar@cellbox=\box57
+)
+\TX@col@width=\dimen186
+\TX@old@table=\dimen187
+\TX@old@col=\dimen188
+\TX@target=\dimen189
+\TX@delta=\dimen190
+\TX@cols=\count457
+\TX@ftn=\toks30
+) (c:/texlive/2025/texmf-dist/tex/latex/fancyvrb/fancyvrb.sty
+Package: fancyvrb 2025/07/28 4.6 verbatim text (tvz,hv)
+\FV@CodeLineNo=\count458
+\FV@InFile=\read4
+\FV@TabBox=\box58
+\c@FancyVerbLine=\count459
+\FV@StepNumber=\count460
+\FV@OutFile=\write4
+)
 Package csquotes Info: Checking for multilingual support...
 Package csquotes Info: ... found 'babel' package.
 Package csquotes Info: Adjusting default style.
 Package csquotes Info: Redefining alias 'default' -> 'english'.
-LaTeX Font Info:    Trying to load font information for T1+lmr on input line 35.
+LaTeX Font Info:    Trying to load font information for T1+lmr on input line 38.
  (c:/texlive/2025/texmf-dist/tex/latex/lm/t1lmr.fd
 File: t1lmr.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
-) (./ELEC475_Lab1Report.aux)
-\openout1 = `ELEC475_Lab1Report.aux'.
+) (./ELEC475_Lab2Report.aux)
+\openout1 = `ELEC475_Lab2Report.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 35.
-LaTeX Font Info:    ... okay on input line 35.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 35.
-LaTeX Font Info:    ... okay on input line 35.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 35.
-LaTeX Font Info:    ... okay on input line 35.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 35.
-LaTeX Font Info:    ... okay on input line 35.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 35.
-LaTeX Font Info:    ... okay on input line 35.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 35.
-LaTeX Font Info:    ... okay on input line 35.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 35.
-LaTeX Font Info:    ... okay on input line 35.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 35.
-LaTeX Font Info:    ... okay on input line 35.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 35.
-LaTeX Font Info:    ... okay on input line 35.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
@@ -669,33 +702,27 @@ LaTeX Font Info:    ... okay on input line 35.
 
 (c:/texlive/2025/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count456
-\scratchdimen=\dimen183
-\scratchbox=\box56
-\nofMPsegments=\count457
-\nofMParguments=\count458
-\everyMPshowfont=\toks29
-\MPscratchCnt=\count459
-\MPscratchDim=\dimen184
-\MPnumerator=\count460
-\makeMPintoPDFobject=\count461
-\everyMPtoPDFconversion=\toks30
+\scratchcounter=\count461
+\scratchdimen=\dimen191
+\scratchbox=\box59
+\nofMPsegments=\count462
+\nofMParguments=\count463
+\everyMPshowfont=\toks31
+\MPscratchCnt=\count464
+\MPscratchDim=\dimen192
+\MPnumerator=\count465
+\makeMPintoPDFobject=\count466
+\everyMPtoPDFconversion=\toks32
 ) (c:/texlive/2025/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-base.sty
 Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
- (c:/texlive/2025/texmf-dist/tex/latex/grfext/grfext.sty
-Package: grfext 2019/12/03 v1.3 Manage graphics extensions (HO)
-)
 Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 485.
-Package grfext Info: Graphics extension search list:
-(grfext)             [.pdf,.png,.jpg,.mps,.jpeg,.jbig2,.jb2,.PDF,.PNG,.JPG,.JPEG,.JBIG2,.JB2,.eps]
-(grfext)             \AppendGraphicsExtensions on input line 504.
  (c:/texlive/2025/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
 File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Live
 ))
-Package hyperref Info: Link coloring OFF on input line 35.
- (./ELEC475_Lab1Report.out) (./ELEC475_Lab1Report.out)
-\@outlinefile=\write4
-\openout4 = `ELEC475_Lab1Report.out'.
+Package hyperref Info: Link coloring OFF on input line 38.
+ (./ELEC475_Lab2Report.out) (./ELEC475_Lab2Report.out)
+\@outlinefile=\write5
+\openout5 = `ELEC475_Lab2Report.out'.
 
 Package biblatex Info: Trying to load language 'english' -> 'cms-american'...
 Package biblatex Info: ... file 'cms-american.lbx' found.
@@ -718,108 +745,96 @@ File: english.lbx 2025/07/10 v3.21 biblatex localization (PK/MW)
 Package biblatex Info: Input encoding 'utf8' detected.
 Package biblatex Info: Automatic encoding selection.
 (biblatex)             Assuming data encoding 'utf8'.
-\openout3 = `ELEC475_Lab1Report.bcf'.
+\openout3 = `ELEC475_Lab2Report.bcf'.
 
 Package biblatex Info: Trying to load bibliographic data...
-Package biblatex Info: ... file 'ELEC475_Lab1Report.bbl' not found.
+Package biblatex Info: ... file 'ELEC475_Lab2Report.bbl' not found.
 
-No file ELEC475_Lab1Report.bbl.
-Package biblatex Info: Reference section=0 on input line 35.
-Package biblatex Info: Reference segment=0 on input line 35.
-
-Underfull \hbox (badness 10000) in paragraph at lines 45--52
-
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 45--52
-
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 55--59
-
- []
-
-LaTeX Font Info:    Trying to load font information for OT1+lmr on input line 59.
-(c:/texlive/2025/texmf-dist/tex/latex/lm/ot1lmr.fd
-File: ot1lmr.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
-)
-LaTeX Font Info:    Trying to load font information for OML+lmm on input line 59.
- (c:/texlive/2025/texmf-dist/tex/latex/lm/omllmm.fd
-File: omllmm.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
-)
-LaTeX Font Info:    Trying to load font information for OMS+lmsy on input line 59.
- (c:/texlive/2025/texmf-dist/tex/latex/lm/omslmsy.fd
-File: omslmsy.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
-)
-LaTeX Font Info:    Trying to load font information for OMX+lmex on input line 59.
- (c:/texlive/2025/texmf-dist/tex/latex/lm/omxlmex.fd
-File: omxlmex.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
-)
-LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <10.95> on input line 59.
-LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <8> on input line 59.
-LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <6> on input line 59.
-LaTeX Font Info:    Trying to load font information for U+msa on input line 59.
- (c:/texlive/2025/texmf-dist/tex/latex/amsfonts/umsa.fd
-File: umsa.fd 2013/01/14 v3.01 AMS symbols A
-)
-LaTeX Font Info:    Trying to load font information for U+msb on input line 59.
- (c:/texlive/2025/texmf-dist/tex/latex/amsfonts/umsb.fd
-File: umsb.fd 2013/01/14 v3.01 AMS symbols B
-)
-Underfull \hbox (badness 10000) in paragraph at lines 61--70
-
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 61--70
-
- []
-
-<src/loss.MLP.8.png, id=16, 867.24pt x 505.89pt>
-File: src/loss.MLP.8.png Graphic file (type png)
-<use src/loss.MLP.8.png>
-Package pdftex.def Info: src/loss.MLP.8.png  used on input line 73.
-(pdftex.def)             Requested size: 390.2544pt x 227.64839pt.
-
-Underfull \hbox (badness 10000) in paragraph at lines 72--79
-
- []
+No file ELEC475_Lab2Report.bbl.
+Package biblatex Info: Reference section=0 on input line 38.
+Package biblatex Info: Reference segment=0 on input line 38.
+(./ELEC475_Lab2Report.toc)
+\tf@toc=\write6
+\openout6 = `ELEC475_Lab2Report.toc'.
 
 
 
 [1{c:/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map}{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-ec.enc}
 
-{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-mathit.enc}{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-rm.enc}{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-mathex.enc}{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-mathsy.enc}]
+] (c:/texlive/2025/texmf-dist/tex/latex/lm/ot1lmr.fd) (c:/texlive/2025/texmf-dist/tex/latex/lm/omllmm.fd) (c:/texlive/2025/texmf-dist/tex/latex/lm/omslmsy.fd) (c:/texlive/2025/texmf-dist/tex/latex/lm/omxlmex.fd) (c:/texlive/2025/texmf-dist/tex/latex/amsfonts/umsa.fd) (c:/texlive/2025/texmf-dist/tex/latex/amsfonts/umsb.fd) (c:/texlive/2025/texmf-dist/tex/latex/lm/t1lmtt.fd)
 
-[2 <./src/loss.MLP.8.png>] (./ELEC475_Lab1Report.aux)
+LaTeX Warning: \verb may be unreliable inside tabularx on input line 87.
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 87--87
+[]|[]\T1/lmtt/m/n/10.95 in_channels=3\T1/lmr/m/n/10.95 , []\T1/lmtt/m/n/10.95 out_channels=64\T1/lmr/m/n/10.95 ,
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 87--87
+[]|[]\T1/lmtt/m/n/10.95 in_channels=64\T1/lmr/m/n/10.95 , []\T1/lmtt/m/n/10.95 out_channels=128\T1/lmr/m/n/10.95 ,
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 87--87
+[]|[]\T1/lmtt/m/n/10.95 in_channels=128\T1/lmr/m/n/10.95 , []\T1/lmtt/m/n/10.95 out_channels=256\T1/lmr/m/n/10.95 ,
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 92--95
+
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 97--100
+
+ []
+
+
+
+[2]
+Overfull \hbox (42.67262pt too wide) in paragraph at lines 111--141
+ [][] 
+ []
+
+
+
+[3{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-rm.enc}{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-mathsy.enc}]
+Underfull \hbox (badness 10000) in paragraph at lines 184--189
+
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 184--189
+
+ []
+
+
+
+[4] (./ELEC475_Lab2Report.aux)
  ***********
 LaTeX2e <2025-06-01> patch level 1
 L3 programming layer <2025-08-13>
  ***********
-Package rerunfilecheck Info: File `ELEC475_Lab1Report.out' has not changed.
-(rerunfilecheck)             Checksum: 44ADF84F6700DAFC6FFCE257DD0E6615;315.
-Package logreq Info: Writing requests to 'ELEC475_Lab1Report.run.xml'.
-\openout1 = `ELEC475_Lab1Report.run.xml'.
+Package rerunfilecheck Info: File `ELEC475_Lab2Report.out' has not changed.
+(rerunfilecheck)             Checksum: E497B3C1CDA60A0B9F6EC48FEA81E5E9;924.
+Package logreq Info: Writing requests to 'ELEC475_Lab2Report.run.xml'.
+\openout1 = `ELEC475_Lab2Report.run.xml'.
 
  ) 
 Here is how much of TeX's memory you used:
- 22833 strings out of 467800
- 406266 string characters out of 5436055
- 1578327 words of memory out of 5000000
- 51218 multiletter control sequences out of 15000+600000
- 655150 words of font info for 63 fonts, out of 8000000 for 9000
+ 23443 strings out of 467800
+ 415652 string characters out of 5436055
+ 1600516 words of memory out of 5000000
+ 51805 multiletter control sequences out of 15000+600000
+ 658464 words of font info for 65 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 79i,11n,80p,782b,3950s stack positions out of 10000i,1000n,20000p,200000b,200000s
-<c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmbx12.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmex10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmmi10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmmi8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmr10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmr8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmsy10.pfb>
-Output written on ELEC475_Lab1Report.pdf (2 pages, 126385 bytes).
+ 79i,11n,80p,1277b,3950s stack positions out of 10000i,1000n,20000p,200000b,200000s
+<c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmbx10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmbx12.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmr10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmr8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmsy10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmsy8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmtt10.pfb>
+Output written on ELEC475_Lab2Report.pdf (4 pages, 154171 bytes).
 PDF statistics:
- 79 PDF objects out of 1000 (max. 8388607)
- 57 compressed objects within 1 object stream
- 7 named destinations out of 1000 (max. 500000)
- 30 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 113 PDF objects out of 1000 (max. 8388607)
+ 91 compressed objects within 1 object stream
+ 15 named destinations out of 1000 (max. 500000)
+ 65 words of extra memory for PDF output out of 10000 (max. 10000000)
 
