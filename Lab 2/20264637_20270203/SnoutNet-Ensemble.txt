@@ -1,0 +1,2 @@
+py ./ensemble.py -x .\models\sw_BOTH_AUG.pth -y .\models\alex_BOTH_AUG.pth -z .\models\vgg_BOTH_AUG.pth
+py ./ensemble.py -x .\models\sw_BOTH_AUG.pth -y .\models\alex_BOTH_AUG.pth -z .\models\vgg_BOTH_AUG.pth -s -g -v

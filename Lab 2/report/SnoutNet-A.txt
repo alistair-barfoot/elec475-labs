@@ -1,4 +1,0 @@
-py .\train.py -s alex_NO_AUG.pth -p alex_plot_NO_AUG.png -e 50 -b 32 -a
-py .\train.py -f -r -s alex_AUG.pth -p dw_plot_AUG.png -e 50 -b 32 -a
-py .\test.py -m .\models\alex_AUG.pth -g -t alex
-py .\test.py -m .\models\alex_AUG.pth -g -s -v -t alex
