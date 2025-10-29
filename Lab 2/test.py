@@ -186,9 +186,9 @@ def visualize_prediction(image_path, predicted_coords, ground_truth_coords=None,
     cv2.destroyAllWindows()
 
 
-def validate_single_model(model_path, labels, args):
+def test_single_model(model_path, labels, args):
     """
-    Validate a single model and return results.
+    Tests a single model and return results.
     
     Args:
         model_path (str): Path to the model file
@@ -288,7 +288,7 @@ def report_statistics(modelname, results):
 
 def main():
     """Main validation function."""
-    parser = argparse.ArgumentParser(description='Validate snoutNet model on test images')
+    parser = argparse.ArgumentParser(description='Test snoutNet model on test images')
     parser.add_argument('-g', '--ground', action='store_true', 
                help='Show ground truth coordinates')
     parser.add_argument('-v', '--verbose', action='store_true', 
@@ -300,10 +300,10 @@ def main():
     parser.add_argument('-t', '--type', type=str, default='any', choices=['alex', 'vgg', 'snout', 'any'],
                help="Model type filter to use when validating multiple files: 'alex', 'vgg', 'snout' or 'any'")
     parser.add_argument('-a', '--all', action='store_true',
-               help='Validate all .pth files in the models folder (filtered by --type)')
+               help='Test all .pth files in the models folder (filtered by --type)')
     args = parser.parse_args()
 
-    # Load ground truth data
+    # Load ground truth data 
     labels = pd.read_csv('test_noses.txt', header=None, names=['filename', 'coordinates'])
 
     device = 'cpu'
@@ -313,7 +313,7 @@ def main():
     else :
         print("Using CPU for validation")
 
-    # Build the list of model files to validate.
+    # Build the list of model files to test.
     if args.all:
         # Gather all .pth files then filter by selected type
         all_files = glob.glob('models/*.pth')
@@ -362,7 +362,7 @@ def main():
       model_name = os.path.basename(model_path)
       print(f"Validating model: {model_name}")
       
-      results = validate_single_model(model_path, labels, args)
+      results = test_single_model(model_path, labels, args)
       
       if results:
         report_statistics(os.path.basename(model_path), results)

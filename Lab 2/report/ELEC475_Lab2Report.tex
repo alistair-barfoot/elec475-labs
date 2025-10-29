@@ -1,5 +1,5 @@
 % DOCUMENT SETUP
-\documentclass[letterpaper,11pt,twoside]{article}
+\documentclass[letterpaper,11pt]{article}
 \hyphenpenalty=8000
 \textwidth=125mm
 \textheight=200mm
@@ -13,11 +13,12 @@
 \raggedbottom
 \usepackage{xurl}
 \usepackage{graphicx}
+\usepackage{xcolor}
 \usepackage{amssymb}
 \usepackage{mathtools}
 \usepackage{alltt}
 \usepackage{amsmath}
-\usepackage[pdftex, linkcolor=blue]{hyperref}
+\usepackage[pdftex, hidelinks]{hyperref}
 \urlstyle{same}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -98,47 +99,46 @@ The SnoutNet model was trained for 50 epochs with a batch size of 32 using the A
 \\
 The loss function used was the Mean Squared Error (MSE) loss. Early stopping is also implemented if no validation loss improvement has been observed for 5 epochs. In the case of early stopping, the model weights are reverted to the best observed validation loss. 
 
-
 \section{Augmentation}
-Data augmentation was optionally applied to the training. A horizontal flip to simulate mirrored images was applied as well as a random rotation of $\pm10 ^{\circ}$ to provide rotational variance. For both horizontal flip and a random rotation, the label for the nose vector needed to be adjusted, since the images position within the frame changed the snout of each animal would have changed in position too.\\ 
+Data augmentation was optionally applied to the training. A horizontal flip to simulate mirrored images was applied as well as a random rotation of $\pm10 ^{\circ}$ to provide rotational variance. For both horizontal flip and a random rotation, the label for the nose vector needed to be adjusted, since the images position within the frame changed the snout of each animal would have changed in position too.\\
 \\
-The horizontal flip occured with a probability of 0.1, and the random rotation was applied with a probability of 1. 
+The horizontal flip occured with a probability of 0.1, and the random rotation was applied with a probability of 1.
 
-
+\newpage
 \section{Results}
 The training was conducted on a NVIDIA RTX 3060 Super laptop edition. To calculate the distance from ground truth for testing, the distances were adjusted to account for the resizing of the images to 227x227 pixels and rounded to the nearest integer.\\
 \\
-The training results for each model and augmentation strategy are summarized in Table \ref{tab:training_results}, while the error statistics are presented in Table \ref{tab:localization_error_stats}. 
+The training results for each model and augmentation strategy are summarized in Table \ref{tab:training_results}, while the error statistics are presented in Table \ref{tab:localization_error_stats}.
 
 \begin{table}[h!]
   \centering
   \resizebox{\linewidth}{!}{
-  \begin{tabular}{|c|c|c|c|c|c|}
-    \hline
-    \textbf{Model}              & \textbf{Augmentation} & \textbf{Epochs} & \textbf{Train Loss} & \textbf{Test Loss} & \textbf{Time Elapsed (h:mm)} \\
-    \hline
-    \multirow{4}{*}{SnoutNet}   & None & 26 & 213 & 398 & 0:13\\ 
-    \cline{2-6} & Flip & 26 & 347 & 541 & 0:14 \\
-    \cline{2-6} & Rotate  & 33  & 291 & 455 &  0:18 \\
-    \cline{2-6}& Flip / Rotate  & 50 & 395 & 427 &  0:27\\
-    \hline
-    \multirow{4}{*}{SnoutNet-A} & None & 14 & 87 & 168 & 0:10 \\
-    \cline{2-6} & Flip & 16 & 72 & 182 & 0:11 \\
-    \cline{2-6} & Rotate & 34 & 55 & 119 &0:24 \\
-    \cline{2-6} & Flip/Rotate & 43 & 51 & 103 & 0:31 \\
-    \hline
-    \multirow{4}{*}{SnoutNet-V} & None & 6 & 94 & 147 & 0:46\\
-    \cline{2-6} & Flip & 9 & 118 & 123 & 1:09\\
-    \cline{2-6} & Rotate & 20 & 35 & 87 & 2:34\\
-    \cline{2-6} & Flip/Rotate & 14 & 131 & 129 & 1:48\\
-    \hline
-  \end{tabular}
+    \begin{tabular}{|c|c|c|c|c|c|}
+      \hline
+      \textbf{Model}              & \textbf{Augmentation} & \textbf{Epochs} & \textbf{Train Loss} & \textbf{Test Loss} & \textbf{Time Elapsed (h:mm)} \\
+      \hline
+      \multirow{4}{*}{SnoutNet}   & None                  & 26              & 213                 & 398                & 0:13                         \\
+      \cline{2-6}                 & Flip                  & 26              & 347                 & 541                & 0:14                         \\
+      \cline{2-6}                 & Rotate                & 33              & 291                 & 455                & 0:18                         \\
+      \cline{2-6}                 & Flip / Rotate         & 50              & 395                 & 427                & 0:27                         \\
+      \hline
+      \multirow{4}{*}{SnoutNet-A} & None                  & 14              & 87                  & 168                & 0:10                         \\
+      \cline{2-6}                 & Flip                  & 16              & 72                  & 182                & 0:11                         \\
+      \cline{2-6}                 & Rotate                & 34              & 55                  & 119                & 0:24                         \\
+      \cline{2-6}                 & Flip/Rotate           & 43              & 51                  & 103                & 0:31                         \\
+      \hline
+      \multirow{4}{*}{SnoutNet-V} & None                  & 6               & 94                  & 147                & 0:46                         \\
+      \cline{2-6}                 & Flip                  & 9               & 118                 & 123                & 1:09                         \\
+      \cline{2-6}                 & Rotate                & 20              & 35                  & 87                 & 2:34                         \\
+      \cline{2-6}                 & Flip/Rotate           & 14              & 131                 & 129                & 1:48                         \\
+      \hline
+    \end{tabular}
   }
   \caption{Training results for each model and augmentation strategy.}
   \label{tab:training_results}
 \end{table}
 
-\newpage
+% \newpage
 
 \begin{table}[h!]
   \centering
@@ -146,41 +146,41 @@ The training results for each model and augmentation strategy are summarized in 
     \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|c|}
       \hline
       \multirow{2}{*}{Model}      & \multirow{2}{*}{Augmentation} & \multicolumn{4}{|c|}{Localization Error} & \multicolumn{4}{|c|}{Localization Error (4 Worst)} & \multicolumn{4}{|c|}{Localization Error (4 Best)}                                                               \\
-      \cline{3-14}& & min & max & mean & stdev & min & max & mean & stdev & min & max & mean & stdev \\
+      \cline{3-14}                &                               & min                                      & max                                                & mean                                              & stdev & min & max & mean & stdev & min & max & mean & stdev \\
       \hline
-      \multirow{4}{*}{SnoutNet} & None & 1 & 145 & 26 & 19.3 & 106 & 145 & 122 & 16.4 & 1 & 2 & 1 & 0.4\\
+      \multirow{4}{*}{SnoutNet}   & None                          & 1                                        & 145                                                & 26                                                & 19.3  & 106 & 145 & 122  & 16.4  & 1   & 2   & 1    & 0.4   \\
       \cline{2-14}
-      & Flip & 1 & 132 & 26 & 19.2 & 109 & 132 & 119 & 9.3 & 1 & 2 & 1 & 0.4 \\ 
+                                  & Flip                          & 1                                        & 132                                                & 26                                                & 19.2  & 109 & 132 & 119  & 9.3   & 1   & 2   & 1    & 0.4   \\
       \cline{2-14}
-      & Rotate & 1 & 171 & 24 & 19.5 & 113 & 171 & 136 & 22.1 & 1 & 1 & 1 & 0.2\\
+                                  & Rotate                        & 1                                        & 171                                                & 24                                                & 19.5  & 113 & 171 & 136  & 22.1  & 1   & 1   & 1    & 0.2   \\
       \cline{2-14}
-      & Flip/Rotate & 0 & 140 & 23 & 18.1 & 103 & 140 & 123 & 13.7 & 0 & 2 & 1 & 0.6\\
+                                  & Flip/Rotate                   & 0                                        & 140                                                & 23                                                & 18.1  & 103 & 140 & 123  & 13.7  & 0   & 2   & 1    & 0.6   \\
       \hline
-      \multirow{4}{*}{SnoutNet-A} & None & 0 & 117 & 14 & 13.4 & 82 & 117 & 94 & 13.5 &  0 & 1 & 1 & 0.1\\
+      \multirow{4}{*}{SnoutNet-A} & None                          & 0                                        & 117                                                & 14                                                & 13.4  & 82  & 117 & 94   & 13.5  & 0   & 1   & 1    & 0.1   \\
       \cline{2-14}
-      & Flip & 0 & 99 & 13 & 12.5 & 73 & 99 & 88 & 10.0 & 0 & 1 & 1 & 0.1\\
+                                  & Flip                          & 0                                        & 99                                                 & 13                                                & 12.5  & 73  & 99  & 88   & 10.0  & 0   & 1   & 1    & 0.1   \\
       \cline{2-14}
-      & Rotate & 0 & 111 & 10 & 12.7 & 71 & 111 & 93 & 14.5 & 0 & 1 & 0 & 0.2\\
+                                  & Rotate                        & 0                                        & 111                                                & 10                                                & 12.7  & 71  & 111 & 93   & 14.5  & 0   & 1   & 0    & 0.2   \\
       \cline{2-14}
-      & Flip/Rotate &0 & 116 & 10 & 11.1 & 68 & 116 & 85 & 18.4 & 0 & 0 & 0 & 0.2\\
+                                  & Flip/Rotate                   & 0                                        & 116                                                & 10                                                & 11.1  & 68  & 116 & 85   & 18.4  & 0   & 0   & 0    & 0.2   \\
       \hline
-      \multirow{4}{*}{SnoutNet-V} & None & 0 & 107 & 10 & 13.3 & 84 & 107 & 96 & 9.7 & 0 & 0 & 0 & 0.2\\
+      \multirow{4}{*}{SnoutNet-V} & None                          & 0                                        & 107                                                & 10                                                & 13.3  & 84  & 107 & 96   & 9.7   & 0   & 0   & 0    & 0.2   \\
       \cline{2-14}
-      & Flip & 0 & 88 & 10 & 9.3 & 71 & 88 & 82 & 6.3 & 0 & 1 & 1 & 0.2\\
+                                  & Flip                          & 0                                        & 88                                                 & 10                                                & 9.3   & 71  & 88  & 82   & 6.3   & 0   & 1   & 1    & 0.2   \\
       \cline{2-14}
-      & Rotate & 1 & 120 & 9 & 10.0 & 80 & 120 & 93 & 15.7 & 1 & 1 & 1 & 0.1\\
+                                  & Rotate                        & 1                                        & 120                                                & 9                                                 & 10.0  & 80  & 120 & 93   & 15.7  & 1   & 1   & 1    & 0.1   \\
       \cline{2-14}
-      & Flip/Rotate & 0 & 110 & 9 & 11.1 & 84 & 110 & 94 & 9.8 & 0 & 1 & 0 & 0.1\\
+                                  & Flip/Rotate                   & 0                                        & 110                                                & 9                                                 & 11.1  & 84  & 110 & 94   & 9.8   & 0   & 1   & 0    & 0.1   \\
       \hline
-      \multirow{4}{*}{Ensemble} \\
+      \multirow{4}{*}{Ensemble}   & None                          & 0                                        & 115                                                & 13                                                & 13.2  & 85  & 115 & 95   & 11.9  & 0   & 1   & 0    & 0.3   \\
       \cline{2-14}
-      \\
+                                  & Flip                          & 0                                        & 93                                                 & 13                                                & 11.8  & 72  & 93  & 86   & 8.2   & 0   & 1   & 0    & 0.3   \\
       \cline{2-14}
-      \\
+                                  & Rotate                        & 0                                        & 110                                                & 12                                                & 12.2  & 87  & 110 & 97   & 8.8   & 0   & 1   & 1    & 0.1   \\
       \cline{2-14}
-      \\
+                                  & Flip/Rotate                   & 0                                        & 93                                                 & 13                                                & 11.8  & 72  & 93  & 86   & 8.2   & 0   & 1   & 0    & 0.3   \\
       \hline
-                                                    
+
       \hline
     \end{tabular}%
   }
@@ -199,11 +199,12 @@ The SnoutNet architecture was the worst-performing model overall when compared t
 \section{Ensemble Approach}
 % Describe how your ensemble approach combined the infromation from the three models. Discuss how this impacted performance.
 The ensemble approach combined the predictions from each of the three models by asking each model to predict the snout position for a given image, then averaging the (u,v) coordinates from each model to arrive at a final prediction. \\
+\\
+Overall, the ensemble approach had a negative impact on the performance of the model. All of the SnoutNet-V and most of the SnoutNet-A individual models outperformed the ensemble in terms of mean localization error. This is due to the fact that the base model SnoutNet performed poorly, which drags down to overall performance when averaging the predictions. In the future, to improve on the ensemble approach, a weighted average could be used where better-performing models have a higher weight in the final prediction. This can be tuned using trial-and-error on the validation set to find the optimal weights for each model.
 
-\newpage
 \section{LLM Usage}
 % Share the link to your conversation with LLM of your choice (e.g., ChatGPT, Claude, etc.). How did you make sure that code or concepts generated by LLM were not hallucinations?
-\textbf{\href{https://github.com/copilot/share/88025032-03a4-8871-b803-a44664ab6910}{Link to LLM Conversation}}\\
+\textcolor{blue}{\textbf{\href{https://github.com/copilot/share/88025032-03a4-8871-b803-a44664ab6910}{Link to LLM Conversation}}}\\
 \\
 For this lab, GitHub Copilot was used to assist in generating the structure of the SnoutNet dataset and DataLoader classes. However, the code generated by the LLM was not just copied and ran in the project. Instead, each line of the code generated by the LLM was carefully reveiewed and tested to ensure that it functioned as intended. \\
 \\
