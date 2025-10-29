@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.9.11)  28 OCT 2025 20:41
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.9.11)  28 OCT 2025 21:32
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -652,35 +652,52 @@ Package: fancyvrb 2025/07/28 4.6 verbatim text (tvz,hv)
 \c@FancyVerbLine=\count459
 \FV@StepNumber=\count460
 \FV@OutFile=\write4
+) (c:/texlive/2025/texmf-dist/tex/latex/caption/caption.sty
+Package: caption 2023/08/05 v3.6o Customizing captions (AR)
+ (c:/texlive/2025/texmf-dist/tex/latex/caption/caption3.sty
+Package: caption3 2023/07/31 v2.4d caption3 kernel (AR)
+\caption@tempdima=\dimen191
+\captionmargin=\dimen192
+\caption@leftmargin=\dimen193
+\caption@rightmargin=\dimen194
+\caption@width=\dimen195
+\caption@indent=\dimen196
+\caption@parindent=\dimen197
+\caption@hangindent=\dimen198
+Package caption Info: Standard document class detected.
+)
+\c@caption@flags=\count461
+\c@continuedfloat=\count462
+Package caption Info: hyperref package is loaded.
 )
 Package csquotes Info: Checking for multilingual support...
 Package csquotes Info: ... found 'babel' package.
 Package csquotes Info: Adjusting default style.
 Package csquotes Info: Redefining alias 'default' -> 'english'.
-LaTeX Font Info:    Trying to load font information for T1+lmr on input line 39.
+LaTeX Font Info:    Trying to load font information for T1+lmr on input line 40.
  (c:/texlive/2025/texmf-dist/tex/latex/lm/t1lmr.fd
 File: t1lmr.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 ) (./ELEC475_Lab2Report.aux)
 \openout1 = `ELEC475_Lab2Report.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
@@ -718,16 +735,16 @@ LaTeX Font Info:    ... okay on input line 39.
 
 (c:/texlive/2025/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count461
-\scratchdimen=\dimen191
+\scratchcounter=\count463
+\scratchdimen=\dimen199
 \scratchbox=\box59
-\nofMPsegments=\count462
-\nofMParguments=\count463
+\nofMPsegments=\count464
+\nofMParguments=\count465
 \everyMPshowfont=\toks31
-\MPscratchCnt=\count464
-\MPscratchDim=\dimen192
-\MPnumerator=\count465
-\makeMPintoPDFobject=\count466
+\MPscratchCnt=\count466
+\MPscratchDim=\dimen256
+\MPnumerator=\count467
+\makeMPintoPDFobject=\count468
 \everyMPtoPDFconversion=\toks32
 ) (c:/texlive/2025/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-base.sty
 Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
@@ -735,7 +752,7 @@ Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 48
  (c:/texlive/2025/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
 File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Live
 ))
-Package hyperref Info: Link coloring OFF on input line 39.
+Package hyperref Info: Link coloring OFF on input line 40.
  (./ELEC475_Lab2Report.out) (./ELEC475_Lab2Report.out)
 \@outlinefile=\write5
 \openout5 = `ELEC475_Lab2Report.out'.
@@ -767,8 +784,10 @@ Package biblatex Info: Trying to load bibliographic data...
 Package biblatex Info: ... file 'ELEC475_Lab2Report.bbl' not found.
 
 No file ELEC475_Lab2Report.bbl.
-Package biblatex Info: Reference section=0 on input line 39.
-Package biblatex Info: Reference segment=0 on input line 39.
+Package biblatex Info: Reference section=0 on input line 40.
+Package biblatex Info: Reference segment=0 on input line 40.
+Package caption Info: Begin \AtBeginDocument code.
+Package caption Info: End \AtBeginDocument code.
 (./ELEC475_Lab2Report.toc)
 \tf@toc=\write6
 \openout6 = `ELEC475_Lab2Report.toc'.
@@ -779,84 +798,151 @@ Package biblatex Info: Reference segment=0 on input line 39.
 
 ] (c:/texlive/2025/texmf-dist/tex/latex/lm/ot1lmr.fd) (c:/texlive/2025/texmf-dist/tex/latex/lm/omllmm.fd) (c:/texlive/2025/texmf-dist/tex/latex/lm/omslmsy.fd) (c:/texlive/2025/texmf-dist/tex/latex/lm/omxlmex.fd) (c:/texlive/2025/texmf-dist/tex/latex/amsfonts/umsa.fd) (c:/texlive/2025/texmf-dist/tex/latex/amsfonts/umsb.fd) (c:/texlive/2025/texmf-dist/tex/latex/lm/t1lmtt.fd)
 
-LaTeX Warning: \verb may be unreliable inside tabularx on input line 88.
+LaTeX Warning: \verb may be unreliable inside tabularx on input line 89.
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 88--88
+Underfull \hbox (badness 10000) in paragraph at lines 89--89
 []|[]\T1/lmtt/m/n/10.95 in_channels=3\T1/lmr/m/n/10.95 , []\T1/lmtt/m/n/10.95 out_channels=64\T1/lmr/m/n/10.95 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 88--88
+Underfull \hbox (badness 10000) in paragraph at lines 89--89
 []|[]\T1/lmtt/m/n/10.95 in_channels=64\T1/lmr/m/n/10.95 , []\T1/lmtt/m/n/10.95 out_channels=128\T1/lmr/m/n/10.95 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 88--88
+Underfull \hbox (badness 10000) in paragraph at lines 89--89
 []|[]\T1/lmtt/m/n/10.95 in_channels=128\T1/lmr/m/n/10.95 , []\T1/lmtt/m/n/10.95 out_channels=256\T1/lmr/m/n/10.95 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 93--96
+Underfull \hbox (badness 10000) in paragraph at lines 94--97
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 98--101
+Underfull \hbox (badness 10000) in paragraph at lines 99--102
 
  []
 
 
 
 [2]
-Underfull \hbox (badness 10000) in paragraph at lines 103--106
+Underfull \hbox (badness 10000) in paragraph at lines 104--107
 
  []
 
 
 
 [3{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-rm.enc}{c:/texlive/2025/texmf-dist/fonts/enc/dvips/lm/lm-mathsy.enc}]
-Underfull \hbox (badness 10000) in paragraph at lines 109--112
-
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 193--198
-
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 193--198
-
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 193--198
+Underfull \hbox (badness 10000) in paragraph at lines 110--113
 
  []
 
 
 
 [4]
-Underfull \hbox (badness 10000) in paragraph at lines 201--204
+<pics/Snoutnet1.png, id=78, 375.65344pt x 249.93375pt>
+File: pics/Snoutnet1.png Graphic file (type png)
+<use pics/Snoutnet1.png>
+Package pdftex.def Info: pics/Snoutnet1.png  used on input line 197.
+(pdftex.def)             Requested size: 133.07489pt x 88.53831pt.
+<pics/snoutnet2.png, id=80, 244.66406pt x 370.38374pt>
+File: pics/snoutnet2.png Graphic file (type png)
+<use pics/snoutnet2.png>
+Package pdftex.def Info: pics/snoutnet2.png  used on input line 197.
+(pdftex.def)             Requested size: 66.53406pt x 100.72269pt.
+<pics/snoutnet3.png, id=81, 371.88937pt x 275.52937pt>
+File: pics/snoutnet3.png Graphic file (type png)
+<use pics/snoutnet3.png>
+Package pdftex.def Info: pics/snoutnet3.png  used on input line 198.
+(pdftex.def)             Requested size: 133.07489pt x 98.59349pt.
+<pics/snoutnet4.png, id=82, 373.395pt x 249.93375pt>
+File: pics/snoutnet4.png Graphic file (type png)
+<use pics/snoutnet4.png>
+Package pdftex.def Info: pics/snoutnet4.png  used on input line 198.
+(pdftex.def)             Requested size: 133.07489pt x 89.07224pt.
+<pics/alex1.png, id=83, 274.77657pt x 366.61969pt>
+File: pics/alex1.png Graphic file (type png)
+<use pics/alex1.png>
+Package pdftex.def Info: pics/alex1.png  used on input line 207.
+(pdftex.def)             Requested size: 88.71434pt x 118.36679pt.
+<pics/alex2.png, id=84, 371.13657pt x 275.52937pt>
+File: pics/alex2.png Graphic file (type png)
+<use pics/alex2.png>
+Package pdftex.def Info: pics/alex2.png  used on input line 207.
+(pdftex.def)             Requested size: 155.25517pt x 115.26328pt.
+<pics/alex3.png, id=85, 371.13657pt x 246.1697pt>
+File: pics/alex3.png Graphic file (type png)
+<use pics/alex3.png>
+Package pdftex.def Info: pics/alex3.png  used on input line 208.
+(pdftex.def)             Requested size: 133.07489pt x 88.26793pt.
+<pics/alex4.png, id=86, 222.8325pt x 165.61874pt>
+File: pics/alex4.png Graphic file (type png)
+<use pics/alex4.png>
+Package pdftex.def Info: pics/alex4.png  used on input line 208.
+(pdftex.def)             Requested size: 121.98137pt x 90.66096pt.
+<pics/Vggnet1.png, id=87, 221.32687pt x 165.61874pt>
+File: pics/Vggnet1.png Graphic file (type png)
+<use pics/Vggnet1.png>
+Package pdftex.def Info: pics/Vggnet1.png  used on input line 217.
+(pdftex.def)             Requested size: 133.07489pt x 99.58427pt.
+<pics/vgg2.png, id=88, 373.395pt x 243.91125pt>
+File: pics/vgg2.png Graphic file (type png)
+<use pics/vgg2.png>
+Package pdftex.def Info: pics/vgg2.png  used on input line 217.
+(pdftex.def)             Requested size: 133.07489pt x 86.92592pt.
+<pics/vgg3.png, id=89, 373.395pt x 246.9225pt>
+File: pics/vgg3.png Graphic file (type png)
+<use pics/vgg3.png>
+Package pdftex.def Info: pics/vgg3.png  used on input line 218.
+(pdftex.def)             Requested size: 133.07489pt x 87.99907pt.
+<pics/vgg4.png, id=90, 448.67625pt x 359.09157pt>
+File: pics/vgg4.png Graphic file (type png)
+<use pics/vgg4.png>
+Package pdftex.def Info: pics/vgg4.png  used on input line 218.
+(pdftex.def)             Requested size: 133.07489pt x 106.50093pt.
+
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+
+
+[5 <./pics/Snoutnet1.png> <./pics/snoutnet2.png> <./pics/snoutnet3.png> <./pics/snoutnet4.png> <./pics/alex1.png> <./pics/alex2.png> <./pics/alex3.png> <./pics/alex4.png>]
+Underfull \hbox (badness 10000) in paragraph at lines 230--231
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 207--212
+Underfull \hbox (badness 10000) in paragraph at lines 232--233
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 207--212
+Underfull \hbox (badness 10000) in paragraph at lines 234--235
 
  []
 
 
 
-[5]
+[6 <./pics/Vggnet1.png> <./pics/vgg2.png> <./pics/vgg3.png> <./pics/vgg4.png>]
+Underfull \hbox (badness 10000) in paragraph at lines 239--240
 
-[6] (./ELEC475_Lab2Report.aux)
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 245--246
+
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 247--248
+
+ []
+
+
+
+[7] (./ELEC475_Lab2Report.aux)
  ***********
 LaTeX2e <2025-06-01> patch level 1
 L3 programming layer <2025-08-13>
@@ -868,18 +954,18 @@ Package logreq Info: Writing requests to 'ELEC475_Lab2Report.run.xml'.
 
  ) 
 Here is how much of TeX's memory you used:
- 23913 strings out of 467800
- 422250 string characters out of 5436055
- 1638403 words of memory out of 5000000
- 52262 multiletter control sequences out of 15000+600000
+ 25309 strings out of 467800
+ 449562 string characters out of 5436055
+ 1660787 words of memory out of 5000000
+ 53647 multiletter control sequences out of 15000+600000
  658464 words of font info for 65 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 79i,11n,80p,1277b,3950s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 79i,12n,80p,1277b,3950s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmbx10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmbx12.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmr10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmr8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmsy10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmsy8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/lm/lmtt10.pfb>
-Output written on ELEC475_Lab2Report.pdf (6 pages, 162264 bytes).
+Output written on ELEC475_Lab2Report.pdf (7 pages, 4610456 bytes).
 PDF statistics:
- 124 PDF objects out of 1000 (max. 8388607)
- 100 compressed objects within 1 object stream
- 18 named destinations out of 1000 (max. 500000)
- 65 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 164 PDF objects out of 1000 (max. 8388607)
+ 114 compressed objects within 2 object streams
+ 23 named destinations out of 1000 (max. 500000)
+ 125 words of extra memory for PDF output out of 10000 (max. 10000000)
 
