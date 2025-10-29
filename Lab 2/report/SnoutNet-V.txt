@@ -1,0 +1,4 @@
+py .\train.py -s vgg_NO_AUG.pth -p vgg_plot_NO_AUG.png -e 50 -b 32 -v
+py .\train.py -f -r -s vgg_AUG.pth -p vgg_plot_AUG.png -e 50 -b 32 -v
+py .\test.py -m .\models\vgg_AUG.pth -g -t vgg
+py .\test.py -m .\models\vgg_AUG.pth -g -s -v -t vgg
