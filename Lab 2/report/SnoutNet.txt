@@ -1,0 +1,4 @@
+py .\train.py -s sw_NO_AUG.pth -p sw_plot_NO_AUG.png -e 50 -b 32
+py .\train.py -f -r -s sw_AUG.pth -p sw_plot_AUG.png -e 50 -b 32
+py .\test.py -m .\models\sw_AUG.pth -g -t snout
+py .\test.py -m .\models\sw_AUG.pth -g -s -v -t snout
