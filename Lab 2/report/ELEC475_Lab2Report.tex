@@ -32,6 +32,7 @@
 \usepackage{multirow}
 \usepackage{tabularx}
 \usepackage{fancyvrb}
+\usepackage{caption}
 %\usepackage[french]{babel}
 %\usepackage[spanish]{babel}
 
@@ -97,7 +98,7 @@ A factcheck was performed by creating a small test script that loads a sample an
 \section{Hyperparameters}
 The SnoutNet model was trained for 50 epochs with a batch size of 32 using the Adam optimizer and Kaiming Normal weight initialization. The learning rate scheduler is applied to monitor validation loss and reduces the learning rate by a factor of 2 if no improvement has been observed in 3 consecutive epochs. The learning rate was set to $3\times10^{-4}$ and a weight decay of $3\times10^{-6}$. \\
 \\
-The loss function used was the Mean Squared Error (MSE) loss. Early stopping is also implemented if no validation loss improvement has been observed for 5 epochs. In the case of early stopping, the model weights are reverted to the best observed validation loss. 
+The loss function used was the Mean Squared Error (MSE) loss. Early stopping is also implemented if no validation loss improvement has been observed for 5 epochs. In the case of early stopping, the model weights are reverted to the best observed validation loss.
 
 \section{Augmentation}
 Data augmentation was optionally applied to the training. A horizontal flip to simulate mirrored images was applied as well as a random rotation of $\pm10 ^{\circ}$ to provide rotational variance. For both horizontal flip and a random rotation, the label for the nose vector needed to be adjusted, since the images position within the frame changed the snout of each animal would have changed in position too.\\
@@ -139,7 +140,6 @@ The training results for each model and augmentation strategy are summarized in 
 \end{table}
 
 % \newpage
-
 \begin{table}[h!]
   \centering
   \resizebox{\linewidth}{!}{
@@ -184,30 +184,68 @@ The training results for each model and augmentation strategy are summarized in 
       \hline
     \end{tabular}%
   }
-  \caption{Localization error statistics for each model and augmentation strategy.}
+  \captionof{table}{Localization error statistics for each model and augmentation strategy.}
   \label{tab:localization_error_stats}
 \end{table}
+
+\newpage
+Tables \ref{tab:snoutpics}, \ref{tab:alexpics}, and \ref{tab:vggpics} show randomly selected example images from the test set with predicted snout positions from each of the three model architectures when trained with both augmentations (flip and rotate). The green circle represents the predicted snout position, while the blue circle represents the ground truth snout position.
+
+\begin{table}[h!]
+  \centering
+  \begin{tabular}{ll}
+    \includegraphics[width=0.3\linewidth]{pics/Snoutnet1.png} & \includegraphics[width=0.15\linewidth]{pics/snoutnet2.png} \\
+    \includegraphics[width=0.3\linewidth]{pics/snoutnet3.png} & \includegraphics[width=0.3\linewidth]{pics/snoutnet4.png}  \\
+  \end{tabular}
+  \caption{Example images from SnoutNet base model with both augmentations}
+  \label{tab:snoutpics}
+\end{table}
+
+\begin{table}[h!]
+  \centering
+  \begin{tabular}{ll}
+    \includegraphics[width=0.2\linewidth]{pics/alex1.png} & \includegraphics[width=0.35\linewidth]{pics/alex2.png}  \\
+    \includegraphics[width=0.3\linewidth]{pics/alex3.png} & \includegraphics[width=0.275\linewidth]{pics/alex4.png} \\
+  \end{tabular}
+  \caption{Example images from SnoutNet-A model with both augmentations}
+  \label{tab:alexpics}
+\end{table}
+
+\begin{table}[h!]
+  \centering
+  \begin{tabular}{ll}
+    \includegraphics[width=0.3\linewidth]{pics/Vggnet1.png} & \includegraphics[width=0.3\linewidth]{pics/vgg2.png} \\
+    \includegraphics[width=0.3\linewidth]{pics/vgg3.png}    & \includegraphics[width=0.3\linewidth]{pics/vgg4.png} \\
+  \end{tabular}
+  \caption{Example images from SnoutNet-V model with both augmentations}
+  \label{tab:vggpics}
+\end{table}
+
+\newpage
+\newpage
+\newpage
 
 \section{Performance}
 % Discuss the performance of your system. How well did it perform? Was the performance as expected? Discuss which (if any) of the augmentation methods were beneficial. What challenges did you experience, and how did you overcome them?
 Overall, the model performed well in identifying the snout position of the animals in the images. The best performing (non-ensemble) model was SnoutNet-V trained with rotation augmentation, achieving a mean localization error of 9 pixels with a standard deviation of 10.0 pixels. This model achieved a test loss of 87 while training and reached 20 epochs before early stopping.\\
-\\
+
 In general, the flip augmentation did not significantly improve performance, and in the case of SnoutNet-V, it actually led to a slight decrease in performance when going from rotation only to flip/rotate. \\
-\\
+
 The SnoutNet architecture was the worst-performing model overall when compared to the SnoutNet-A and SnoutNet-V variants. This was expected, as the latter two models have much more parameters and more advanced techniques such as dropout. The SnoutNet-A model performed better than the base model, but just slightly worse than SnoutNet-V despite the significant different in model size and training time. \\
 
+\newpage
 \section{Ensemble Approach}
 % Describe how your ensemble approach combined the infromation from the three models. Discuss how this impacted performance.
 The ensemble approach combined the predictions from each of the three models by asking each model to predict the snout position for a given image, then averaging the (u,v) coordinates from each model to arrive at a final prediction. \\
-\\
+
 Overall, the ensemble approach had a negative impact on the performance of the model. All of the SnoutNet-V and most of the SnoutNet-A individual models outperformed the ensemble in terms of mean localization error. This is due to the fact that the base model SnoutNet performed poorly, which drags down to overall performance when averaging the predictions. In the future, to improve on the ensemble approach, a weighted average could be used where better-performing models have a higher weight in the final prediction. This can be tuned using trial-and-error on the validation set to find the optimal weights for each model.
 
 \section{LLM Usage}
 % Share the link to your conversation with LLM of your choice (e.g., ChatGPT, Claude, etc.). How did you make sure that code or concepts generated by LLM were not hallucinations?
 \textcolor{blue}{\textbf{\href{https://github.com/copilot/share/88025032-03a4-8871-b803-a44664ab6910}{Link to LLM Conversation}}}\\
-\\
-For this lab, GitHub Copilot was used to assist in generating the structure of the SnoutNet dataset and DataLoader classes. However, the code generated by the LLM was not just copied and ran in the project. Instead, each line of the code generated by the LLM was carefully reveiewed and tested to ensure that it functioned as intended. \\
-\\
+
+For this lab, GitHub Copilot was used to assist in generating the structure of the SnoutNet dataset and DataLoader classes. However, the code generated by the LLM was not just copied and ran in the project. Instead, each line of the code generated by the LLM was carefully reviewed and tested to ensure that it functioned as intended. \\
+
 Debugging files and lines were added at every step of the process to ensure that each part was functioning correctly and as predicted. In the final version of the lab, much of the code generated by the LLM has been modified or removed entirely as it was not taken just at face value.
 
 
