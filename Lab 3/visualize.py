@@ -40,6 +40,9 @@ def main():
     # Print statistics about the segmentation
     print_mask_statistics(output_mask)
     
+    # Calculate and print mIoU
+    miou = print_miou_results(output_mask, mask_rgb)
+    
     # Display results
     show_mask_on_image(img_rgb, mask_rgb, output_mask)
 
@@ -132,6 +135,100 @@ def show_mask_on_image(image, ground_truth, mask):
     # Don't show interactively to avoid blocking
     # plt.show()
 
+def calculate_iou_per_class(pred_mask, gt_mask, num_classes=21):
+    """
+    Calculate IoU for each class
+    
+    Args:
+        pred_mask: Predicted segmentation mask
+        gt_mask: Ground truth segmentation mask
+        num_classes: Number of classes (21 for PASCAL VOC)
+    
+    Returns:
+        iou_per_class: IoU for each class
+        valid_classes: Classes that appear in ground truth
+    """
+    iou_per_class = []
+    valid_classes = []
+    
+    for class_id in range(num_classes):
+        # Get pixels for this class
+        pred_class = (pred_mask == class_id)
+        gt_class = (gt_mask == class_id)
+        
+        # Calculate intersection and union
+        intersection = np.logical_and(pred_class, gt_class).sum()
+        union = np.logical_or(pred_class, gt_class).sum()
+        
+        # Only calculate IoU if this class appears in ground truth
+        if union > 0:
+            iou = intersection / union
+            iou_per_class.append(iou)
+            valid_classes.append(class_id)
+    
+    return np.array(iou_per_class), valid_classes
+
+def calculate_miou(pred_mask, gt_mask, num_classes=21):
+    """
+    Calculate mean Intersection over Union (mIoU)
+    
+    Args:
+        pred_mask: Predicted segmentation mask
+        gt_mask: Ground truth segmentation mask
+        num_classes: Number of classes (21 for PASCAL VOC)
+    
+    Returns:
+        miou: Mean IoU
+        iou_per_class: IoU for each class
+        class_names: Names of valid classes
+    """
+    # Handle potential size mismatches
+    if pred_mask.shape != gt_mask.shape:
+        print(f"Warning: Mask size mismatch. Pred: {pred_mask.shape}, GT: {gt_mask.shape}")
+        # Resize predicted mask to match ground truth
+        pred_mask = cv2.resize(pred_mask.astype(np.uint8), 
+                              (gt_mask.shape[1], gt_mask.shape[0]), 
+                              interpolation=cv2.INTER_NEAREST)
+    
+    # PASCAL VOC uses 255 as ignore/void class, convert to background (0)
+    gt_mask = np.where(gt_mask == 255, 0, gt_mask)
+    
+    iou_per_class, valid_classes = calculate_iou_per_class(pred_mask, gt_mask, num_classes)
+    
+    # Calculate mean IoU
+    miou = np.mean(iou_per_class) if len(iou_per_class) > 0 else 0.0
+    
+    # Get class names
+    classes = create_class_colormap()
+    class_names = [classes[i] if i < len(classes) else f"Class_{i}" for i in valid_classes]
+    
+    return miou, iou_per_class, class_names, valid_classes
+
+def print_miou_results(pred_mask, gt_mask):
+    """Print detailed mIoU results"""
+    miou, iou_per_class, class_names, valid_classes = calculate_miou(pred_mask, gt_mask)
+    
+    print("\n" + "="*60)
+    print("mIoU EVALUATION RESULTS")
+    print("="*60)
+    print(f"Mean IoU (mIoU): {miou:.4f} ({miou*100:.2f}%)")
+    print(f"Number of classes evaluated: {len(valid_classes)}")
+    
+    print(f"\nPer-class IoU:")
+    print("-" * 40)
+    for i, (class_id, class_name, iou) in enumerate(zip(valid_classes, class_names, iou_per_class)):
+        print(f"Class {class_id:2d} ({class_name:12s}): {iou:.4f} ({iou*100:5.1f}%)")
+    
+    # Additional statistics
+    best_class_idx = np.argmax(iou_per_class)
+    worst_class_idx = np.argmin(iou_per_class)
+    
+    print(f"\nBest performing class: {class_names[best_class_idx]} (IoU: {iou_per_class[best_class_idx]:.4f})")
+    print(f"Worst performing class: {class_names[worst_class_idx]} (IoU: {iou_per_class[worst_class_idx]:.4f})")
+    print("="*60)
+    
+    return miou
+
 def create_class_colormap():
     """Create a colormap for PASCAL VOC classes"""
     # PASCAL VOC 2012 has 21 classes (including background)
@@ -160,5 +257,94 @@ def print_mask_statistics(mask):
             print(f"Class {class_id:2d} ({class_name:12s}): {pixel_count:6d} pixels ({percentage:5.1f}%)")
 
 
+def evaluate_multiple_images(model, preprocess, num_images=10):
+    """
+    Evaluate mIoU across multiple images
+    
+    Args:
+        model: Trained FCN model
+        preprocess: Preprocessing transforms
+        num_images: Number of images to evaluate
+    
+    Returns:
+        avg_miou: Average mIoU across all images
+    """
+    print(f"\n{'='*60}")
+    print(f"EVALUATING mIoU ON {num_images} IMAGES")
+    print(f"{'='*60}")
+    
+    # Load validation image IDs
+    val_dir = 'archive/VOC2012_train_val/VOC2012_train_val/ImageSets/Segmentation/val.txt'
+    val_ids = []
+    
+    try:
+        with open(val_dir, 'r') as f:
+            val_ids = [line.strip() for line in f.readlines()]
+    except FileNotFoundError:
+        # Fallback to train IDs if val not available
+        train_dir = 'archive/VOC2012_train_val/VOC2012_train_val/ImageSets/Segmentation/train.txt'
+        with open(train_dir, 'r') as f:
+            val_ids = [line.strip() for line in f.readlines()]
+        print("Using train set for evaluation (val set not found)")
+    
+    # Randomly sample images
+    if len(val_ids) > num_images:
+        val_ids = random.sample(val_ids, num_images)
+    
+    all_mious = []
+    all_class_ious = []
+    
+    for i, image_id in enumerate(val_ids):
+        print(f"\nProcessing image {i+1}/{len(val_ids)}: {image_id}")
+        
+        try:
+            # Load image and ground truth
+            img_rgb = load_image(image_id)
+            gt_mask = load_mask(image_id)
+            
+            # Get prediction
+            pred_mask = test_model(image_id, model, preprocess)
+            
+            # Calculate mIoU for this image
+            miou, iou_per_class, class_names, valid_classes = calculate_miou(pred_mask, gt_mask)
+            all_mious.append(miou)
+            
+            print(f"  mIoU: {miou:.4f} ({len(valid_classes)} classes)")
+            
+        except Exception as e:
+            print(f"  Error processing {image_id}: {e}")
+            continue
+    
+    # Calculate overall statistics
+    if all_mious:
+        avg_miou = np.mean(all_mious)
+        std_miou = np.std(all_mious)
+        
+        print(f"\n{'='*60}")
+        print(f"FINAL RESULTS")
+        print(f"{'='*60}")
+        print(f"Images evaluated: {len(all_mious)}")
+        print(f"Average mIoU: {avg_miou:.4f} ± {std_miou:.4f}")
+        print(f"Best mIoU: {max(all_mious):.4f}")
+        print(f"Worst mIoU: {min(all_mious):.4f}")
+        print(f"{'='*60}")
+        
+        return avg_miou
+    else:
+        print("No images were successfully processed!")
+        return 0.0
+
+
 if __name__ == "__main__":
     main()
+    
+    # Uncomment the following lines to evaluate on multiple images
+    # print("\n" + "="*60)
+    # print("Would you like to evaluate on multiple images? (y/n)")
+    # response = input().lower()
+    # if response == 'y':
+    #     weights = FCN_ResNet50_Weights.DEFAULT
+    #     preprocess = weights.transforms()
+    #     model = fcn_resnet50(weights=weights, progress=False)
+    #     model.eval()
+    #     evaluate_multiple_images(model, preprocess, num_images=20)
