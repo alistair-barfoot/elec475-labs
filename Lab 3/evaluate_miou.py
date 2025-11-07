@@ -82,6 +82,8 @@ def calculate_miou(pred_mask, gt_mask, num_classes=21):
             valid_classes.append(class_id)
     
     miou = np.mean(ious) if ious else 0.0
+    if miou > 0.4:
+        visualize.display_segmentation_results(pred_mask, gt_mask)
     return miou, ious, valid_classes
 
 def get_class_names():
