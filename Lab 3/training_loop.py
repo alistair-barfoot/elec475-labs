@@ -12,11 +12,11 @@ Features:
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingWarmRestarts
 import numpy as np
 import time
 from pathlib import Path
-
+from torchsummary import summary
 from MobileNet_model import MBV3SmallSeg
 from dataloader import get_voc_dataloader
 
@@ -85,10 +85,97 @@ class IoUMetric:
         }
 
 
+def check_model_sanity(model, dataloader, device, num_classes=21):
+    """
+    Perform a quick sanity check on model initialization.
+    """
+    model.eval()
+    with torch.no_grad():
+        # Get one batch
+        images, masks = next(iter(dataloader))
+        images = images.to(device)
+        masks = masks.to(device)
+        
+        # Forward pass
+        logits = model(images)
+        preds = torch.argmax(logits, dim=1)
+        
+        # Check if predictions are reasonable
+        unique_preds = torch.unique(preds)
+        print(f"Model predicting {len(unique_preds)} unique classes: {unique_preds.cpu().numpy()}")
+        
+        # Check if all predictions are the same (bad initialization)
+        if len(unique_preds) == 1:
+            print("⚠️  WARNING: Model is predicting only one class - may need better initialization")
+        
+        # Check prediction distribution
+        pred_dist = torch.bincount(preds.flatten(), minlength=num_classes)
+        most_frequent = torch.argmax(pred_dist)
+        percentage = (pred_dist[most_frequent] / preds.numel() * 100).item()
+        print(f"Most frequent prediction: class {most_frequent} ({percentage:.1f}% of pixels)")
+        
+        if percentage > 90:
+            print("⚠️  WARNING: Model heavily biased towards one class")
+    
+    model.train()  # Reset to training mode
+
+
+def debug_training_step(model, dataloader, criterion, device, num_classes=21):
+    """
+    Debug a single training step to check gradients and learning.
+    """
+    model.train()
+    
+    # Get one batch
+    images, masks = next(iter(dataloader))
+    images = images.to(device)
+    masks = masks.to(device)
+    
+    print(f"\n🔍 DEBUG: Training step analysis")
+    print(f"Input shape: {images.shape}")
+    print(f"Target shape: {masks.shape}")
+    print(f"Target unique values: {torch.unique(masks).cpu().numpy()}")
+    
+    # Forward pass
+    model.zero_grad()
+    logits = model(images)
+    loss = criterion(logits, masks)
+    
+    print(f"Logits shape: {logits.shape}")
+    print(f"Loss value: {loss.item():.6f}")
+    
+    # Check predictions before training
+    with torch.no_grad():
+        preds_before = torch.argmax(logits, dim=1)
+        unique_preds_before = torch.unique(preds_before)
+        print(f"Predictions before: {len(unique_preds_before)} classes {unique_preds_before.cpu().numpy()}")
+    
+    # Backward pass
+    loss.backward()
+    
+    # Check gradients
+    total_grad_norm = 0
+    param_count = 0
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            grad_norm = param.grad.norm().item()
+            total_grad_norm += grad_norm ** 2
+            param_count += 1
+    
+    total_grad_norm = total_grad_norm ** 0.5
+    print(f"Total gradient norm: {total_grad_norm:.6f}")
+    print(f"Parameters with gradients: {param_count}")
+    
+    if total_grad_norm < 1e-6:
+        print("⚠️  WARNING: Very small gradients - model may not be learning!")
+    
+    return loss.item(), total_grad_norm
+
+
 # ---------------------------
 # Training and validation functions
 # ---------------------------
-def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch):
+def train_one_epoch(model, dataloader, criterion, optimizer, scheduler, device, epoch):
     """
     Train for one epoch.
     
@@ -110,12 +197,18 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch):
         
         # Backward
         loss.backward()
+        
+        # Add gradient clipping to prevent exploding gradients
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        
+        # Update weights BEFORE updating learning rate
         optimizer.step()
+        scheduler.step()  # OneCycleLR needs to be called every batch
         
         running_loss += loss.item()
         
-        # Print progress every 50 batches
-        if (batch_idx + 1) % 50 == 0:
+        # Print progress every 25 batches or at the end
+        if (batch_idx + 1) % 25 == 0 or (batch_idx + 1) == num_batches:
             print(f"  Epoch [{epoch}] Batch [{batch_idx+1}/{num_batches}] Loss: {loss.item():.4f}")
     
     avg_loss = running_loss / num_batches
@@ -163,12 +256,12 @@ def validate(model, dataloader, criterion, device, num_classes=21):
 def main():
     # Hyperparameters
     NUM_CLASSES = 21
-    IMG_SIZE = (256, 256)
-    BATCH_SIZE = 16
+    IMG_SIZE = (256, 256)  # Revert - 256x256 worked better than 224x224
+    BATCH_SIZE = 16  # Increase batch size for more stable gradients
     NUM_EPOCHS = 50
-    LEARNING_RATE = 1e-3
+    LEARNING_RATE = 1e-3  # Higher learning rate for better convergence
     WEIGHT_DECAY = 1e-4
-    PATIENCE = 10  # for early stopping
+    PATIENCE = 15  # More patience for convergence
     
     # Paths
     CHECKPOINT_DIR = Path('./checkpoints')
@@ -216,6 +309,7 @@ def main():
         dropout=0.1
     )
     model = model.to(device)
+    summary(model, input_size=(3, IMG_SIZE[0], IMG_SIZE[1]))
     
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -224,8 +318,23 @@ def main():
     
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss(ignore_index=255)
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
+    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY, betas=(0.9, 0.999))
+    # Use a simpler scheduler that starts with warmup
+    scheduler = optim.lr_scheduler.OneCycleLR(
+        optimizer, 
+        max_lr=LEARNING_RATE, 
+        epochs=NUM_EPOCHS, 
+        steps_per_epoch=len(train_loader),
+        pct_start=0.1  # 10% warmup
+    )
+    
+    # Sanity check model initialization
+    print("\nPerforming model sanity check...")
+    check_model_sanity(model, val_loader, device, num_classes=NUM_CLASSES)
+    
+    # Debug first training step
+    print("\nDebugging first training step...")
+    debug_loss, debug_grad_norm = debug_training_step(model, train_loader, criterion, device, num_classes=NUM_CLASSES)
     
     # Training loop
     print("\n" + "="*60)
@@ -239,7 +348,7 @@ def main():
         epoch_start = time.time()
         
         # Train
-        train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device, epoch)
+        train_loss = train_one_epoch(model, train_loader, criterion, optimizer, scheduler, device, epoch)
         
         # Validate
         val_results = validate(model, val_loader, criterion, device, num_classes=NUM_CLASSES)
@@ -248,8 +357,7 @@ def main():
         
         epoch_time = time.time() - epoch_start
         
-        # Update scheduler
-        scheduler.step(val_miou)
+        # OneCycleLR is updated per batch, no need to call here
         
         # Print epoch summary
         print(f"\n{'='*60}")

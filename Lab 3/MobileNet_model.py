@@ -218,14 +218,35 @@ class MBV3SmallSeg(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                if getattr(m, 'bias', None) is not None:
-                    nn.init.zeros_(m.bias)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.ones_(m.weight)
-                nn.init.zeros_(m.bias)
+        """Initialize weights for custom layers only, preserve pretrained backbone."""
+        # Only initialize the non-backbone modules
+        modules_to_init = [
+            self.context,
+            self.project_mid,
+            self.project_low,
+            self.decoder_reduce,
+            self.decoder_block1,
+            self.decoder_block2,
+            self.classifier_dropout,
+            self.classifier
+        ]
+        
+        for module in modules_to_init:
+            for m in module.modules():
+                if isinstance(m, nn.Conv2d):
+                    # Use smaller initialization for final classifier
+                    if m == self.classifier:
+                        nn.init.normal_(m.weight, 0, 0.01)  # Much smaller init for classifier
+                    else:
+                        nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                    if m.bias is not None:
+                        nn.init.constant_(m.bias, 0)
+                elif isinstance(m, nn.BatchNorm2d):
+                    nn.init.constant_(m.weight, 1)
+                    nn.init.constant_(m.bias, 0)
+                elif isinstance(m, nn.Linear):
+                    nn.init.normal_(m.weight, 0, 0.01)
+                    nn.init.constant_(m.bias, 0)
 
     def _upsample(self, x: torch.Tensor, size: Tuple[int, int]) -> torch.Tensor:
         return F.interpolate(x, size=size, mode='bilinear', align_corners=False)
