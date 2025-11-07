@@ -39,7 +39,12 @@ class VOC2012SegDataset(Dataset):
         self.image_set = image_set
         
         # Base path for train/val data
-        voc_root = os.path.join(root, 'VOC2012_train_val', 'VOC2012_train_val')
+        if image_set == 'train' or image_set == 'val':
+            voc_root = os.path.join(root, 'VOC2012_train_val', 'VOC2012_train_val')
+        elif image_set == 'test':
+            voc_root = os.path.join(root, 'VOC2012_test', 'VOC2012_test')
+        else:
+            raise ValueError("image_set must be 'train', 'val', or 'test'")
         
         # Read image IDs from ImageSets
         split_file = os.path.join(voc_root, 'ImageSets', 'Segmentation', f'{image_set}.txt')
