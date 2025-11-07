@@ -16,10 +16,59 @@ from pathlib import Path
 import time
 from PIL import Image
 import torchvision.transforms as T
+import argparse
+import random
 
 from MobileNet_model import MBV3SmallSeg
 from dataloader import get_voc_dataloader, VOC_CLASSES
 from training_loop import IoUMetric
+
+
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='Test MBV3SmallSeg model on VOC 2012 validation set',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python test.py -r              # Run evaluation and save results only
+  python test.py -v              # Generate visualizations only
+  python test.py -r -v           # Run both evaluation and visualization
+  python test.py                 # Run both (default behavior)
+        """
+    )
+    
+    parser.add_argument('-r', '--results', 
+                        action='store_true',
+                        help='Run model evaluation and save results')
+    
+    parser.add_argument('-v', '--visualize',
+                        action='store_true', 
+                        help='Generate prediction visualizations')
+    
+    parser.add_argument('--checkpoint',
+                        type=str,
+                        default='best_model.pth',
+                        help='Path to model checkpoint (default: best_model.pth)')
+    
+    parser.add_argument('--batch-size',
+                        type=int,
+                        default=16,
+                        help='Batch size for evaluation (default: 16)')
+    
+    parser.add_argument('--num-samples',
+                        type=int,
+                        default=6,
+                        help='Number of samples to visualize (default: 6)')
+    
+    args = parser.parse_args()
+    
+    # If no flags specified, run both by default
+    if not args.results and not args.visualize:
+        args.results = True
+        args.visualize = True
+    
+    return args
 
 
 def load_trained_model(checkpoint_path, num_classes=21, device='cpu'):
@@ -156,86 +205,144 @@ def print_detailed_results(results, class_names=VOC_CLASSES):
 
 
 def visualize_predictions(model, dataloader, device, num_samples=6, save_path='test_predictions.png'):
-    """
-    Visualize model predictions on sample images.
+  """
+  Visualize model predictions on sample images.
+  
+  Args:
+    model: Trained model
+    dataloader: DataLoader for getting samples
+    device: Device for computation
+    num_samples: Number of samples to visualize
+    save_path: Path to save the visualization
+  """
+  model.eval()
+  
+  # Collect all samples from the dataset
+  all_images = []
+  all_masks = []
+  all_preds = []
+  
+  with torch.no_grad():
+    for images, masks in dataloader:
+      images = images.to(device, non_blocking=True)
+      masks = masks.to(device, non_blocking=True)
+      
+      logits = model(images)
+      preds = torch.argmax(logits, dim=1)
+      
+      # Move to CPU for visualization
+      images = images.cpu()
+      masks = masks.cpu()
+      preds = preds.cpu()
+      
+      for i in range(images.shape[0]):
+        all_images.append(images[i])
+        all_masks.append(masks[i])
+        all_preds.append(preds[i])
+  
+  # Randomly select samples
+  total_samples = len(all_images)
+  if total_samples < num_samples:
+    print(f"Warning: Only {total_samples} samples available, showing all of them")
+    num_samples = total_samples
+  
+  random_indices = random.sample(range(total_samples), num_samples)
+  
+  # Get selected samples
+  images_list = [all_images[i] for i in random_indices]
+  masks_list = [all_masks[i] for i in random_indices]
+  preds_list = [all_preds[i] for i in random_indices]
+  
+  # Create visualization
+  fig, axes = plt.subplots(3, num_samples, figsize=(3*num_samples, 9))
+  if num_samples == 1:
+    axes = axes.reshape(3, 1)
+  
+  # ImageNet normalization values for denormalization
+  mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+  std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+  
+  for i in range(num_samples):
+    # Denormalize image
+    img = images_list[i] * std + mean
+    img = torch.clamp(img, 0, 1)
     
-    Args:
-        model: Trained model
-        dataloader: DataLoader for getting samples
-        device: Device for computation
-        num_samples: Number of samples to visualize
-        save_path: Path to save the visualization
-    """
-    model.eval()
+    # Show original image
+    axes[0, i].imshow(img.permute(1, 2, 0).numpy())
+    axes[0, i].set_title(f'Image {random_indices[i]+1}')
+    axes[0, i].axis('off')
     
-    # Get sample images
-    images_list = []
-    masks_list = []
-    preds_list = []
+    # Show ground truth
+    axes[1, i].imshow(masks_list[i].numpy(), cmap='tab20', vmin=0, vmax=20)
+    axes[1, i].set_title('Ground Truth')
+    axes[1, i].axis('off')
     
-    with torch.no_grad():
-        for images, masks in dataloader:
-            images = images.to(device, non_blocking=True)
-            masks = masks.to(device, non_blocking=True)
-            
-            logits = model(images)
-            preds = torch.argmax(logits, dim=1)
-            
-            # Move to CPU for visualization
-            images = images.cpu()
-            masks = masks.cpu()
-            preds = preds.cpu()
-            
-            for i in range(min(images.shape[0], num_samples - len(images_list))):
-                images_list.append(images[i])
-                masks_list.append(masks[i])
-                preds_list.append(preds[i])
-                
-                if len(images_list) >= num_samples:
-                    break
-            
-            if len(images_list) >= num_samples:
-                break
+    # Calculate mIoU for this individual prediction
+    pred_mask = preds_list[i].numpy()
+    gt_mask = masks_list[i].numpy()
     
-    # Create visualization
-    fig, axes = plt.subplots(3, num_samples, figsize=(3*num_samples, 9))
-    if num_samples == 1:
-        axes = axes.reshape(3, 1)
+    # Calculate IoU for each class present
+    valid_ious = []
+    for class_id in range(21):  # VOC has 21 classes (0-20)
+      # Skip ignore pixels (255) and classes not present in ground truth
+      if class_id == 255 or not np.any(gt_mask == class_id):
+        continue
+      
+      # Calculate intersection and union for this class
+      pred_class = (pred_mask == class_id)
+      gt_class = (gt_mask == class_id)
+      
+      intersection = np.logical_and(pred_class, gt_class).sum()
+      union = np.logical_or(pred_class, gt_class).sum()
+      
+      if union > 0:
+        iou = intersection / union
+        valid_ious.append(iou)
     
-    # ImageNet normalization values for denormalization
-    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+    # Calculate mean IoU for this sample
+    sample_miou = np.mean(valid_ious) if valid_ious else 0.0
     
-    for i in range(num_samples):
-        if i < len(images_list):
-            # Denormalize image
-            img = images_list[i] * std + mean
-            img = torch.clamp(img, 0, 1)
-            
-            # Show original image
-            axes[0, i].imshow(img.permute(1, 2, 0).numpy())
-            axes[0, i].set_title(f'Image {i+1}')
-            axes[0, i].axis('off')
-            
-            # Show ground truth
-            axes[1, i].imshow(masks_list[i].numpy(), cmap='tab20', vmin=0, vmax=20)
-            axes[1, i].set_title('Ground Truth')
-            axes[1, i].axis('off')
-            
-            # Show prediction
-            axes[2, i].imshow(preds_list[i].numpy(), cmap='tab20', vmin=0, vmax=20)
-            axes[2, i].set_title('Prediction')
-            axes[2, i].axis('off')
-        else:
-            # Hide empty subplots
-            for row in range(3):
-                axes[row, i].axis('off')
-    
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches='tight')
-    print(f"Predictions visualization saved to {save_path}")
-    
-    return fig
+    # Show prediction with mIoU
+    axes[2, i].imshow(pred_mask, cmap='tab20', vmin=0, vmax=20)
+    axes[2, i].set_title(f'Prediction\nmIoU: {sample_miou:.3f}')
+    axes[2, i].axis('off')
+  
+  plt.tight_layout()
+  
+  # Add legend at the bottom
+  # Create a separate subplot for the legend
+  fig.subplots_adjust(bottom=0.15)  # Make room for legend
+  
+  # Create colormap and legend
+  import matplotlib.patches as mpatches
+  from matplotlib.colors import ListedColormap
+  import matplotlib.cm as cm
+  
+  # Get the tab20 colormap
+  tab20 = cm.get_cmap('tab20')
+  colors = [tab20(i) for i in range(21)]  # 21 VOC classes (0-20)
+  
+  # Create legend patches
+  legend_patches = []
+  for i, class_name in enumerate(VOC_CLASSES):
+    if i < len(colors):
+      patch = mpatches.Patch(color=colors[i], label=f'{i}: {class_name}')
+      legend_patches.append(patch)
+  
+  # Add legend below the plots
+  fig.legend(handles=legend_patches, 
+             loc='lower center', 
+             ncol=7,  # 7 columns for better layout
+             bbox_to_anchor=(0.5, 0.02),
+             fontsize=8,
+             frameon=True,
+             fancybox=True,
+             shadow=True)
+  
+  plt.savefig(save_path, dpi=150, bbox_inches='tight')
+  print(f"Predictions visualization saved to {save_path}")
+  
+  return fig
 
 
 def save_results_summary(results, checkpoint_info, save_path='test_results.txt'):
@@ -268,14 +375,19 @@ def save_results_summary(results, checkpoint_info, save_path='test_results.txt')
 
 def main():
     """Main testing function."""
+    # Parse command line arguments
+    args = parse_arguments()
+    
     print("MBV3SmallSeg Model Testing")
     print("="*30)
+    print(f"Running: {'Results ' if args.results else ''}{'Visualizations' if args.visualize else ''}")
+    print()
     
     # Configuration
-    CHECKPOINT_PATH = 'best_model.pth'
+    CHECKPOINT_PATH = args.checkpoint
     NUM_CLASSES = 21
     IMG_SIZE = (256, 256)
-    BATCH_SIZE = 16
+    BATCH_SIZE = args.batch_size
     
     # Device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -311,29 +423,34 @@ def main():
         print(f"❌ Error loading validation data: {e}")
         return
     
-    # Evaluate model
-    start_time = time.time()
-    try:
-        results = evaluate_model(model, val_loader, device, NUM_CLASSES)
-        eval_time = time.time() - start_time
-        print(f"✓ Evaluation completed in {eval_time:.1f} seconds")
-    except Exception as e:
-        print(f"❌ Error during evaluation: {e}")
-        return
+    # Initialize results variable
+    results = None
+    eval_time = 0
     
-    # Print results
-    print_detailed_results(results)
+    # Run evaluation if requested
+    if args.results:
+        start_time = time.time()
+        try:
+            results = evaluate_model(model, val_loader, device, NUM_CLASSES)
+            eval_time = time.time() - start_time
+            print(f"✓ Evaluation completed in {eval_time:.1f} seconds")
+            
+            # Print and save results
+            print_detailed_results(results)
+            save_results_summary(results, checkpoint_info)
+            
+        except Exception as e:
+            print(f"❌ Error during evaluation: {e}")
+            return
     
-    # Save results
-    save_results_summary(results, checkpoint_info)
-    
-    # Visualize predictions
-    print(f"\nGenerating prediction visualizations...")
-    try:
-        fig = visualize_predictions(model, val_loader, device, num_samples=6)
-        plt.close(fig)  # Close to prevent display issues
-    except Exception as e:
-        print(f"⚠️  Warning: Could not generate visualizations: {e}")
+    # Generate visualizations if requested
+    if args.visualize:
+        print(f"\nGenerating prediction visualizations...")
+        try:
+            fig = visualize_predictions(model, val_loader, device, num_samples=args.num_samples)
+            plt.close(fig)  # Close to prevent display issues
+        except Exception as e:
+            print(f"⚠️  Warning: Could not generate visualizations: {e}")
     
     # Final summary
     print(f"\n{'='*60}")
@@ -341,10 +458,15 @@ def main():
     print(f"{'='*60}")
     print(f"Model: MBV3SmallSeg")
     print(f"Dataset: VOC 2012 validation set ({len(val_loader.dataset)} images)")
-    print(f"Final mIoU: {results['miou']:.4f} ({results['miou']*100:.2f}%)")
-    print(f"Evaluation time: {eval_time:.1f} seconds")
-    print(f"Results saved to: test_results.txt")
-    print(f"Visualizations saved to: test_predictions.png")
+    
+    if args.results and results:
+        print(f"Final mIoU: {results['miou']:.4f} ({results['miou']*100:.2f}%)")
+        print(f"Evaluation time: {eval_time:.1f} seconds")
+        print(f"Results saved to: test_results.txt")
+    
+    if args.visualize:
+        print(f"Visualizations saved to: test_predictions.png")
+    
     print(f"{'='*60}")
 
 
