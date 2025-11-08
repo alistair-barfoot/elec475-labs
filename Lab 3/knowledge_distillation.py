@@ -384,6 +384,23 @@ def main():
         input_size=IMG_SIZE,
         dropout=0.1
     )
+    
+    # Load pre-trained weights from best_model.pth if available
+    pretrained_model_path = Path('best_model.pth')
+    if pretrained_model_path.exists():
+        print(f"Loading pre-trained student weights from {pretrained_model_path}...")
+        try:
+            checkpoint = torch.load(pretrained_model_path, map_location='cpu', weights_only=False)
+            student_model.load_state_dict(checkpoint['model_state_dict'])
+            print(f"✓ Successfully loaded pre-trained weights (epoch {checkpoint.get('epoch', 'unknown')})")
+            print(f"  Pre-trained validation mIoU: {checkpoint.get('val_miou', 'unknown')}")
+        except Exception as e:
+            print(f"⚠️  Could not load pre-trained weights: {e}")
+            print("  Continuing with randomly initialized student model...")
+    else:
+        print(f"⚠️  Pre-trained model not found at {pretrained_model_path}")
+        print("  Starting with randomly initialized student model...")
+    
     student_model = student_model.to(device)
     
     student_total_params = sum(p.numel() for p in student_model.parameters())
@@ -450,6 +467,20 @@ def main():
         if val_results['miou'] > best_miou:
             best_miou = val_results['miou']
             epochs_without_improvement = 0
+            
+            # Check if we started from pre-trained weights
+            pretrained_info = {}
+            if Path('best_model.pth').exists():
+                try:
+                    orig_checkpoint = torch.load('best_model.pth', map_location='cpu', weights_only=False)
+                    pretrained_info = {
+                        'initialized_from': 'best_model.pth',
+                        'original_epoch': orig_checkpoint.get('epoch', 'unknown'),
+                        'original_val_miou': orig_checkpoint.get('val_miou', 'unknown')
+                    }
+                except:
+                    pretrained_info = {'initialized_from': 'best_model.pth', 'load_error': True}
+            
             torch.save({
                 'epoch': epoch,
                 'student_state_dict': student_model.state_dict(),
@@ -460,7 +491,8 @@ def main():
                     'alpha': ALPHA,
                     'beta': BETA,
                     'temperature': TEMPERATURE
-                }
+                },
+                'pretrained_info': pretrained_info
             }, BEST_MODEL_PATH)
             print(f"  ✓ New best mIoU! Student model saved to {BEST_MODEL_PATH}")
         else:
