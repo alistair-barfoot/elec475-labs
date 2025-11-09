@@ -12,16 +12,45 @@ import torch
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from pathlib import Path
 import time
-from PIL import Image
-import torchvision.transforms as T
 import argparse
 import random
+from torchmetrics.segmentation import MeanIoU
 
 from MobileNet_model import MBV3SmallSeg
 from dataloader import get_voc_dataloader, VOC_CLASSES
-from training_loop import IoUMetric
+
+
+def compute_sample_miou(pred_mask, gt_mask, num_classes=21):
+    """
+    Compute mIoU for a single sample, handling ignore pixels (255).
+    
+    Args:
+        pred_mask: Predicted segmentation mask (H, W) tensor
+        gt_mask: Ground truth segmentation mask (H, W) tensor
+        num_classes: Number of classes
+    
+    Returns:
+        float: Mean IoU value
+    """
+    # Mask out ignore pixels (255)
+    mask_valid = (gt_mask != 255)
+    if not mask_valid.any():
+        return 0.0
+    
+    # Replace invalid pixels with 0
+    pred_masked = torch.where(mask_valid, pred_mask, torch.zeros_like(pred_mask))
+    gt_masked = torch.where(mask_valid, gt_mask, torch.zeros_like(gt_mask))
+    
+    # Compute mIoU using torchmetrics (needs batch dimension)
+    miou_metric = MeanIoU(num_classes=num_classes, per_class=False)
+    miou_metric.update(
+        pred_masked.unsqueeze(0),  # Add batch dimension (1, H, W)
+        gt_masked.unsqueeze(0)     # Add batch dimension (1, H, W)
+    )
+    return miou_metric.compute().item()
 
 
 def parse_arguments():
@@ -149,10 +178,11 @@ def evaluate_model(model, dataloader, device, num_classes=21):
     print(f"\nEvaluating model on {len(dataloader.dataset)} samples...")
     
     model.eval()
-    iou_metric = IoUMetric(num_classes=num_classes, ignore_index=255)
     total_loss = 0.0
     num_batches = len(dataloader)
     
+    # Use numpy arrays to accumulate confusion matrix
+    confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     
     with torch.no_grad():
@@ -167,20 +197,48 @@ def evaluate_model(model, dataloader, device, num_classes=21):
             
             # Get predictions
             preds = torch.argmax(logits, dim=1)
-            iou_metric.update(preds, masks)
+            
+            # Update confusion matrix
+            preds_np = preds.cpu().numpy().flatten()
+            masks_np = masks.cpu().numpy().flatten()
+            
+            # Mask out ignore index
+            valid_mask = (masks_np != 255)
+            preds_np = preds_np[valid_mask]
+            masks_np = masks_np[valid_mask]
+            
+            # Update confusion matrix
+            for pred, target in zip(preds_np, masks_np):
+                if 0 <= pred < num_classes and 0 <= target < num_classes:
+                    confusion_matrix[target, pred] += 1
             
             # Progress
             if (batch_idx + 1) % 20 == 0 or (batch_idx + 1) == num_batches:
                 print(f"  Processed {batch_idx + 1}/{num_batches} batches")
     
+    # Compute IoU from confusion matrix
+    # IoU = TP / (TP + FP + FN)
+    intersection = np.diag(confusion_matrix)
+    union = (confusion_matrix.sum(axis=1) + 
+             confusion_matrix.sum(axis=0) - 
+             intersection)
+    
+    # Avoid division by zero
+    iou_per_class = np.zeros(num_classes, dtype=np.float32)
+    valid = union > 0
+    iou_per_class[valid] = intersection[valid] / union[valid]
+    
+    # Mean IoU over classes that appear in the dataset
+    valid_ious = iou_per_class[iou_per_class > 0]
+    mean_iou = valid_ious.mean() if len(valid_ious) > 0 else 0.0
+    
     # Compute final metrics
     avg_loss = total_loss / num_batches
-    iou_results = iou_metric.compute()
     
     results = {
         'loss': avg_loss,
-        'miou': iou_results['miou'],
-        'iou_per_class': iou_results['iou_per_class']
+        'miou': mean_iou,
+        'iou_per_class': iou_per_class
     }
     
     return results
@@ -231,30 +289,20 @@ def visualize_predictions(model, dataloader, device, num_samples=6, save_path='t
   """
   model.eval()
   
-  # Collect all samples from the dataset
+  # First, collect all images and masks without running inference
   all_images = []
   all_masks = []
-  all_preds = []
   
-  with torch.no_grad():
-    for images, masks in dataloader:
-      images = images.to(device, non_blocking=True)
-      masks = masks.to(device, non_blocking=True)
-      
-      logits = model(images)
-      preds = torch.argmax(logits, dim=1)
-      
-      # Move to CPU for visualization
-      images = images.cpu()
-      masks = masks.cpu()
-      preds = preds.cpu()
-      
-      for i in range(images.shape[0]):
-        all_images.append(images[i])
-        all_masks.append(masks[i])
-        all_preds.append(preds[i])
+  for images, masks in dataloader:
+    # Move to CPU immediately - no inference yet
+    images = images.cpu()
+    masks = masks.cpu()
+    
+    for i in range(images.shape[0]):
+      all_images.append(images[i])
+      all_masks.append(masks[i])
   
-  # Randomly select samples
+  # Randomly select sample indices
   total_samples = len(all_images)
   if total_samples < num_samples:
     print(f"Warning: Only {total_samples} samples available, showing all of them")
@@ -265,7 +313,15 @@ def visualize_predictions(model, dataloader, device, num_samples=6, save_path='t
   # Get selected samples
   images_list = [all_images[i] for i in random_indices]
   masks_list = [all_masks[i] for i in random_indices]
-  preds_list = [all_preds[i] for i in random_indices]
+  
+  # Now run inference ONLY on selected samples
+  preds_list = []
+  with torch.no_grad():
+    for img in images_list:
+      img_batch = img.unsqueeze(0).to(device, non_blocking=True)  # Add batch dimension
+      logits = model(img_batch)
+      pred = torch.argmax(logits, dim=1).squeeze(0).cpu()  # Remove batch dimension
+      preds_list.append(pred)
   
   # Create visualization
   fig, axes = plt.subplots(3, num_samples, figsize=(3*num_samples, 9))
@@ -292,32 +348,12 @@ def visualize_predictions(model, dataloader, device, num_samples=6, save_path='t
     axes[1, i].axis('off')
     
     # Calculate mIoU for this individual prediction
-    pred_mask = preds_list[i].numpy()
-    gt_mask = masks_list[i].numpy()
-    
-    # Calculate IoU for each class present
-    valid_ious = []
-    for class_id in range(21):  # VOC has 21 classes (0-20)
-      # Skip ignore pixels (255) and classes not present in ground truth
-      if class_id == 255 or not np.any(gt_mask == class_id):
-        continue
-      
-      # Calculate intersection and union for this class
-      pred_class = (pred_mask == class_id)
-      gt_class = (gt_mask == class_id)
-      
-      intersection = np.logical_and(pred_class, gt_class).sum()
-      union = np.logical_or(pred_class, gt_class).sum()
-      
-      if union > 0:
-        iou = intersection / union
-        valid_ious.append(iou)
-    
-    # Calculate mean IoU for this sample
-    sample_miou = np.mean(valid_ious) if valid_ious else 0.0
+    pred_mask = preds_list[i]
+    gt_mask = masks_list[i]
+    sample_miou = compute_sample_miou(pred_mask, gt_mask)
     
     # Show prediction with mIoU
-    axes[2, i].imshow(pred_mask, cmap='tab20', vmin=0, vmax=20)
+    axes[2, i].imshow(pred_mask.numpy(), cmap='tab20', vmin=0, vmax=20)
     axes[2, i].set_title(f'Prediction\nmIoU: {sample_miou:.3f}')
     axes[2, i].axis('off')
   
@@ -327,13 +363,8 @@ def visualize_predictions(model, dataloader, device, num_samples=6, save_path='t
   # Create a separate subplot for the legend
   fig.subplots_adjust(bottom=0.15)  # Make room for legend
   
-  # Create colormap and legend
-  import matplotlib.patches as mpatches
-  from matplotlib.colors import ListedColormap
-  import matplotlib.cm as cm
-  
-  # Get the tab20 colormap
-  tab20 = cm.get_cmap('tab20')
+  # Get the tab20 colormap (using new API)
+  tab20 = plt.get_cmap('tab20')
   colors = [tab20(i) for i in range(21)]  # 21 VOC classes (0-20)
   
   # Create legend patches
