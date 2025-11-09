@@ -74,8 +74,9 @@ class DistillationLoss(nn.Module):
         student_soft = F.log_softmax(student_logits / self.temperature, dim=1)
         teacher_soft = F.softmax(teacher_logits / self.temperature, dim=1)
         
-        # KL divergence between teacher and student (equivalent to cross-entropy)
-        kd_loss = F.kl_div(student_soft, teacher_soft, reduction='batchmean')
+        # KL divergence between teacher and student
+        # Use 'mean' reduction for spatial dimensions to match CE loss scale
+        kd_loss = F.kl_div(student_soft, teacher_soft, reduction='mean')
         
         # Scale by T² to maintain gradient magnitude
         kd_loss = kd_loss * (self.temperature ** 2)
@@ -323,8 +324,8 @@ def main():
     PATIENCE = 10
     
     # Knowledge distillation parameters
-    ALPHA = 0.5  # Weight for ground truth loss
-    BETA = 0.5   # Weight for distillation loss
+    ALPHA = 0.7  # Weight for ground truth loss (increased to prioritize ground truth)
+    BETA = 0.3   # Weight for distillation loss (reduced to prevent overwhelming)
     TEMPERATURE = 4.0  # Temperature for knowledge distillation
     
     # Paths
@@ -433,6 +434,14 @@ def main():
     
     best_miou = 0.0
     epochs_without_improvement = 0
+    time_start = time.time()
+    
+    def sec_to_hms(s):
+        s = int(max(0, s))
+        h = s // 3600
+        m = (s % 3600) // 60
+        sec = s % 60
+        return f"{h:02d}:{m:02d}:{sec:02d}"
     
     for epoch in range(1, NUM_EPOCHS + 1):
         epoch_start = time.time()
@@ -462,6 +471,12 @@ def main():
         print(f"  Val mIoU:     {val_results['miou']:.4f}")
         print(f"  Time:         {epoch_time:.1f}s")
         print(f"  LR:           {optimizer.param_groups[0]['lr']:.2e}")
+        
+        # Timing information
+        elapsed = time.time() - time_start
+        avg_per_epoch = elapsed / epoch
+        remaining = avg_per_epoch * (NUM_EPOCHS - epoch)
+        print(f"  Elapsed: {sec_to_hms(elapsed)} | Left: {sec_to_hms(remaining)} | Per Epoch: {sec_to_hms(avg_per_epoch)}")
         
         # Save best model
         if val_results['miou'] > best_miou:

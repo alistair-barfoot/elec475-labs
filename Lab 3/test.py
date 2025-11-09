@@ -96,7 +96,21 @@ def load_trained_model(checkpoint_path, num_classes=21, device='cpu'):
     
     # Load checkpoint (weights_only=False needed for PyTorch 2.6+)
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    
+    # Handle different checkpoint formats (regular training vs knowledge distillation)
+    if 'student_state_dict' in checkpoint:
+        # Knowledge distillation checkpoint
+        model.load_state_dict(checkpoint['student_state_dict'])
+        val_loss_key = 'val_total_loss'
+    elif 'model_state_dict' in checkpoint:
+        # Regular training checkpoint
+        model.load_state_dict(checkpoint['model_state_dict'])
+        val_loss_key = 'val_loss'
+    else:
+        # Direct state dict
+        model.load_state_dict(checkpoint)
+        val_loss_key = None
+    
     model = model.to(device)
     model.eval()
     
@@ -104,7 +118,7 @@ def load_trained_model(checkpoint_path, num_classes=21, device='cpu'):
     checkpoint_info = {
         'epoch': checkpoint.get('epoch', 'unknown'),
         'val_miou': checkpoint.get('val_miou', 'unknown'),
-        'val_loss': checkpoint.get('val_loss', 'unknown')
+        'val_loss': checkpoint.get(val_loss_key, 'unknown') if val_loss_key else 'unknown'
     }
     
     print(f"✓ Model loaded successfully!")
