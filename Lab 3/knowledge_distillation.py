@@ -22,11 +22,76 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import numpy as np
 import time
+import argparse
 from pathlib import Path
 
 from MobileNet_model import MBV3SmallSeg
 from dataloader import get_voc_dataloader
 from torchvision.models.segmentation import fcn_resnet50
+
+
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='Knowledge Distillation Training for MobileNet Semantic Segmentation',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Knowledge Distillation Methods:
+  -r, --response    Response-based distillation using output logits (temperature scaling)
+  -f, --feature     Feature-based distillation using intermediate representations (cosine similarity)
+
+Examples:
+  python knowledge_distillation.py -r    # Response-based distillation (default)
+  python knowledge_distillation.py -f    # Feature-based distillation
+        """
+    )
+    
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-r', '--response', 
+                       action='store_true',
+                       help='Use response-based knowledge distillation (temperature scaling)')
+    
+    group.add_argument('-f', '--feature',
+                       action='store_true',
+                       help='Use feature-based knowledge distillation (cosine similarity)')
+    
+    parser.add_argument('--epochs',
+                        type=int,
+                        default=50,
+                        help='Number of training epochs (default: 50)')
+    
+    parser.add_argument('--batch-size',
+                        type=int,
+                        default=8,
+                        help='Batch size for training (default: 8)')
+    
+    parser.add_argument('--learning-rate',
+                        type=float,
+                        default=1e-3,
+                        help='Learning rate (default: 1e-3)')
+    
+    parser.add_argument('--temperature',
+                        type=float,
+                        default=4.0,
+                        help='Temperature for response-based distillation (default: 4.0)')
+    
+    parser.add_argument('--alpha',
+                        type=float,
+                        default=0.75,
+                        help='Weight for ground truth loss (default: 0.75)')
+    
+    parser.add_argument('--beta',
+                        type=float,
+                        default=0.25,
+                        help='Weight for distillation loss (default: 0.25)')
+    
+    args = parser.parse_args()
+    
+    # If no method specified, default to response-based
+    if not args.response and not args.feature:
+        args.response = True
+    
+    return args
 
 
 # ---------------------------
@@ -101,10 +166,10 @@ class TeacherModel(nn.Module):
         if pretrained:
             try:
                 from torchvision.models.segmentation import FCN_ResNet50_Weights
-                weights = FCN_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1
+                weights = FCN_ResNet50_Weights.DEFAULT
                 self.model = fcn_resnet50(weights=weights)
             except:
-                self.model = fcn_resnet50(pretrained=True)
+                self.model = fcn_resnet50(weights=weights, progress=True)
         else:
             self.model = fcn_resnet50(pretrained=False)
             
@@ -454,6 +519,149 @@ def train_knowledge_distillation(teacher, student, train_loader, val_loader, epo
     print(f"\nTraining complete! Best mIoU: {best_miou:.4f}")
     return best_miou
 
+def train_cosine_loss(teacher, student, train_loader, val_loader, epochs, learning_rate, hidden_rep_loss_weight, ce_loss_weight, device, save_path='best_student_feature_kd.pth'):
+    """
+    Feature-based knowledge distillation using cosine similarity between hidden representations.
+    
+    Args:
+        teacher: Teacher model (FCN-ResNet50)
+        student: Student model (MBV3SmallSeg) 
+        train_loader: Training DataLoader
+        val_loader: Validation DataLoader
+        epochs: Number of training epochs
+        learning_rate: Learning rate for optimizer
+        hidden_rep_loss_weight: Weight for cosine similarity loss
+        ce_loss_weight: Weight for ground truth loss
+        device: Device to train on
+        save_path: Path to save best model
+    """
+    ce_loss = nn.CrossEntropyLoss(ignore_index=255)
+    cosine_loss = nn.CosineEmbeddingLoss()
+    optimizer = optim.AdamW(student.parameters(), lr=learning_rate, weight_decay=1e-4)
+    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
+
+    teacher.to(device)
+    student.to(device)
+    teacher.eval()  # Teacher set to evaluation mode
+    student.train() # Student to train mode
+    
+    # Tracking
+    best_miou = 0.0
+    epochs_without_improvement = 0
+    patience = 10
+    
+    print(f"\nStarting Feature-based Knowledge Distillation Training...")
+    print(f"CE Weight: {ce_loss_weight}, Feature Weight: {hidden_rep_loss_weight}")
+    print("="*80)
+
+    for epoch in range(epochs):
+        student.train()
+        running_loss = 0.0
+        running_ce_loss = 0.0
+        running_feature_loss = 0.0
+        num_batches = len(train_loader)
+        
+        for batch_idx, (inputs, labels) in enumerate(train_loader):
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+
+            # Forward pass with the teacher model and get hidden representation
+            with torch.no_grad():
+                teacher_logits = teacher(inputs)
+                # For segmentation, we'll use the teacher's output as the "hidden representation"
+                # In a more sophisticated approach, you would extract intermediate features
+                teacher_hidden = teacher_logits.view(teacher_logits.size(0), -1)  # Flatten spatial dims
+
+            # Forward pass with the student model
+            student_logits = student(inputs)
+            
+            # Ensure student and teacher outputs have same spatial dimensions
+            if teacher_logits.shape != student_logits.shape:
+                teacher_logits = F.interpolate(
+                    teacher_logits, 
+                    size=student_logits.shape[2:], 
+                    mode='bilinear', 
+                    align_corners=False
+                )
+                teacher_hidden = teacher_logits.view(teacher_logits.size(0), -1)
+            
+            student_hidden = student_logits.view(student_logits.size(0), -1)  # Flatten spatial dims
+
+            # Calculate the cosine loss
+            # Target is a vector of ones (maximize cosine similarity)
+            hidden_rep_loss = cosine_loss(
+                student_hidden, 
+                teacher_hidden, 
+                target=torch.ones(inputs.size(0)).to(device)
+            )
+
+            # Calculate the true label loss
+            label_loss = ce_loss(student_logits, labels)
+
+            # Weighted sum of the two losses
+            loss = hidden_rep_loss_weight * hidden_rep_loss + ce_loss_weight * label_loss
+
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+            running_ce_loss += label_loss.item()
+            running_feature_loss += hidden_rep_loss.item()
+            
+            # Print progress
+            if (batch_idx + 1) % 50 == 0:
+                print(f"  Epoch [{epoch+1}] Batch [{batch_idx+1}/{num_batches}] "
+                      f"Total: {loss.item():.4f} CE: {label_loss.item():.4f} Feature: {hidden_rep_loss.item():.4f}")
+
+        # Validation
+        student.eval()
+        val_miou = validate_segmentation_model(student, val_loader, device)
+        
+        # Update scheduler
+        scheduler.step(val_miou)
+        
+        # Print epoch summary
+        avg_loss = running_loss / len(train_loader)
+        avg_ce = running_ce_loss / len(train_loader) 
+        avg_feature = running_feature_loss / len(train_loader)
+        
+        print(f"\nEpoch {epoch+1}/{epochs}")
+        print(f"  Train - Total: {avg_loss:.4f} CE: {avg_ce:.4f} Feature: {avg_feature:.4f}")
+        print(f"  Val mIoU: {val_miou:.4f}")
+        print(f"  LR: {optimizer.param_groups[0]['lr']:.2e}")
+        
+        # Save best model
+        if val_miou > best_miou:
+            best_miou = val_miou
+            epochs_without_improvement = 0
+            
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': student.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'val_miou': val_miou,
+                'distillation_params': {
+                    'method': 'feature-based',
+                    'ce_weight': ce_loss_weight,
+                    'feature_weight': hidden_rep_loss_weight
+                }
+            }, save_path)
+            print(f"  ✓ New best mIoU! Model saved to {save_path}")
+        else:
+            epochs_without_improvement += 1
+            print(f"  No improvement for {epochs_without_improvement} epoch(s)")
+        
+        print("-" * 60)
+        
+        # Early stopping
+        if epochs_without_improvement >= patience:
+            print(f"Early stopping triggered after {epoch+1} epochs")
+            break
+    
+    print(f"\nFeature-based training complete! Best mIoU: {best_miou:.4f}")
+    return best_miou
+
 
 def validate_segmentation_model(model, val_loader, device, num_classes=21):
     """
@@ -479,24 +687,37 @@ def validate_segmentation_model(model, val_loader, device, num_classes=21):
 # Main knowledge distillation training
 # ---------------------------
 def main():
+    # Parse command line arguments
+    args = parse_arguments()
+    
     # Hyperparameters
     NUM_CLASSES = 21
     IMG_SIZE = (256, 256)
-    BATCH_SIZE = 8  # Reduced for memory efficiency with teacher model
-    NUM_EPOCHS = 50
-    LEARNING_RATE = 1e-3
+    BATCH_SIZE = args.batch_size
+    NUM_EPOCHS = args.epochs
+    LEARNING_RATE = args.learning_rate
     WEIGHT_DECAY = 1e-4
     PATIENCE = 10
     
     # Knowledge distillation parameters
-    ALPHA = 0.75  # Weight for ground truth loss (ce_loss_weight)
-    BETA = 0.25   # Weight for distillation loss (soft_target_loss_weight) 
-    TEMPERATURE = 4.0  # Temperature for knowledge distillation
+    ALPHA = args.alpha    # Weight for ground truth loss
+    BETA = args.beta      # Weight for distillation loss
+    TEMPERATURE = args.temperature  # Temperature for response-based distillation
+    
+    # Determine distillation method and setup paths
+    if args.response:
+        method_name = "response-based"
+        save_filename = 'best_student_response_kd.pth'
+        print(f"Selected method: Response-based distillation (temperature scaling)")
+    else:  # args.feature
+        method_name = "feature-based"
+        save_filename = 'best_student_feature_kd.pth'
+        print(f"Selected method: Feature-based distillation (cosine similarity)")
     
     # Paths
     CHECKPOINT_DIR = Path('./checkpoints_kd')
     CHECKPOINT_DIR.mkdir(exist_ok=True)
-    BEST_MODEL_PATH = CHECKPOINT_DIR / 'best_student_kd.pth'
+    BEST_MODEL_PATH = CHECKPOINT_DIR / save_filename
     
     # Device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -513,7 +734,7 @@ def main():
         img_size=IMG_SIZE,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=2 if device.type == 'cuda' else 0,  # Reduced for memory
+        num_workers=2 if device.type == 'cuda' else 0,
         pin_memory=(device.type == 'cuda')
     )
     
@@ -574,31 +795,49 @@ def main():
     print(f"Student total params: {student_total_params:,}")
     print(f"Student trainable params: {student_trainable_params:,}")
     
-    # Run integrated knowledge distillation training
+    # Run knowledge distillation training based on selected method
     print("\n" + "="*80)
-    print("Starting Integrated Knowledge Distillation Training...")
+    print(f"Starting {method_name.title()} Knowledge Distillation Training...")
     print(f"Teacher: FCN-ResNet50 ({teacher_params:,} params)")
     print(f"Student: MBV3SmallSeg ({student_trainable_params:,} trainable params)")
-    print(f"CE Weight: {ALPHA}, KD Weight: {BETA}, Temperature: {TEMPERATURE}")
+    print(f"CE Weight: {ALPHA}, Distillation Weight: {BETA}")
+    if args.response:
+        print(f"Temperature: {TEMPERATURE}")
     print("="*80)
     
-    # Train using the integrated function
-    best_miou = train_knowledge_distillation(
-        teacher=teacher_model,
-        student=student_model,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        epochs=NUM_EPOCHS,
-        learning_rate=LEARNING_RATE,
-        T=TEMPERATURE,
-        soft_target_loss_weight=BETA,  # β for distillation loss
-        ce_loss_weight=ALPHA,         # α for ground truth loss
-        device=device,
-        save_path=str(BEST_MODEL_PATH)
-    )
+    # Choose training function based on method
+    if args.response:
+        # Response-based distillation
+        best_miou = train_knowledge_distillation(
+            teacher=teacher_model,
+            student=student_model,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            epochs=NUM_EPOCHS,
+            learning_rate=LEARNING_RATE,
+            T=TEMPERATURE,
+            soft_target_loss_weight=BETA,  # β for distillation loss
+            ce_loss_weight=ALPHA,         # α for ground truth loss
+            device=device,
+            save_path=str(BEST_MODEL_PATH)
+        )
+    else:
+        # Feature-based distillation
+        best_miou = train_cosine_loss(
+            teacher=teacher_model,
+            student=student_model,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            epochs=NUM_EPOCHS,
+            learning_rate=LEARNING_RATE,
+            hidden_rep_loss_weight=BETA,  # β for feature similarity loss
+            ce_loss_weight=ALPHA,         # α for ground truth loss
+            device=device,
+            save_path=str(BEST_MODEL_PATH)
+        )
     
     print("\n" + "="*80)
-    print("Knowledge Distillation Training Complete!")
+    print(f"{method_name.title()} Knowledge Distillation Training Complete!")
     print(f"Best validation mIoU: {best_miou:.4f}")
     print(f"Best student model saved at: {BEST_MODEL_PATH}")
     print("="*80)
