@@ -1,0 +1,94 @@
+% DOCUMENT SETUP
+\documentclass[letterpaper,11pt]{article}
+\hyphenpenalty=8000
+\textwidth=125mm
+\textheight=200mm
+\usepackage[top=3cm, bottom=3cm, inner=3cm, outer=3cm, includehead]{geometry}
+\usepackage{fancyhdr}
+\setlength{\headheight}{13.6pt} % Fix for fancyhdr warning
+\addtolength{\topmargin}{-1.6pt} % Optional: further fix as suggested
+\pagestyle{fancy}
+\fancyhead{}
+\fancyfoot{}
+\raggedbottom
+\usepackage{xurl}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{alltt}
+\usepackage{amsmath}
+\usepackage[pdftex, hidelinks]{hyperref}
+\urlstyle{same}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{csquotes}
+\usepackage[notes, backend=biber]{biblatex-chicago}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\graphicspath{{./imgs/}}
+\usepackage[english]{babel}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{fancyvrb}
+\usepackage{caption}
+%\usepackage[french]{babel}
+%\usepackage[spanish]{babel}
+
+% AUTHOR AND TITLE
+\begin{document}
+\fancyhead[RO]{ELEC 475 Lab 2, Alistair Barfoot and Luke Barry\ \ \ \ \thepage}
+\begin{center}
+  \LARGE
+  \textbf{ELEC 475 Lab 2, Alistair Barfoot and Luke Barry}\\[12pt]
+  \normalsize
+\end{center}
+\tableofcontents
+
+\newpage
+
+\section{Network Architecture}
+% You should describe the structure in sufficient detail so that it can be reimplemented solely from the textual description. You should also have proper citations to the techniques that you used.
+
+\begin{table}[h]
+  \centering
+  % \resizebox{\linewidth}{!}{
+  \begin{tabularx}{\linewidth}{|c|c|c|X|}
+    \hline
+    \textbf{Layer}    & \textbf{Input Shape} & \textbf{Output Size} & \textbf{Parameters}                                                                                      \\
+    \hline
+    \textbf{Conv1}    & 227x227x3            & 114x114x64           & \verb+in_channels=3+, \verb+out_channels=64+, \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+    \\
+    \hline
+    \textbf{ReLU1}    & 114x114x64           & 114x114x64           &                                                                                                          \\
+    \hline
+    \textbf{MaxPool1} & 114x114x64           & 57x57x64             & \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+                                                  \\
+    \hline
+    \textbf{Conv2}    & 57x57x64             & 29x29x128            & \verb+in_channels=64+, \verb+out_channels=128+, \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+  \\
+    \hline
+    \textbf{ReLU2}    & 29x29x128            & 29x29x128            &                                                                                                          \\
+    \hline
+    \textbf{MaxPool2} & 29x29x128            & 15x15x128            & \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+                                                  \\
+    \hline
+    \textbf{Conv3}    & 15x15x128            & 8x8x256              & \verb+in_channels=128+, \verb+out_channels=256+, \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+ \\
+    \hline
+    \textbf{ReLU3}    & 8x8x256              & 8x8x256              &                                                                                                          \\
+    \hline
+    \textbf{MaxPool3} & 8x8x256              & 4x4x256              & \verb+kernel_size=3+, \verb+stride=2+, \verb+padding=1+                                                  \\
+    \hline
+    \textbf{FC1}      & 4x4x256(4096)        & 1024                 &                                                                                                          \\
+    \hline
+    \textbf{ReLU4}    & 1024                 & 1024                 &                                                                                                          \\
+    \hline
+    \textbf{FC2}      & 1024                 & 1024                 &                                                                                                          \\
+    \hline
+    \textbf{ReLU5}    & 1024                 & 1024                 &                                                                                                          \\
+    \hline
+    \textbf{FC3}      & 1024                 & 2 (u,v)              &                                                                                                          \\
+    \hline
+  \end{tabularx}
+  % }
+\end{table}
+
+
+\end{document}

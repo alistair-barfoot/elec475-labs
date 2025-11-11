@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from torchsummary import summary
 
 
 # ---------------------------
@@ -178,7 +179,7 @@ class MBV3SmallSeg(nn.Module):
                  backbone_pretrained: bool = True,
                  aspp_out: int = 128,
                  decoder_channels: Tuple[int, int] = (128, 64),
-                 input_size: Tuple[int, int] = (224, 224),
+                 input_size: Tuple[int, int] = (275,275),
                  dropout: float = 0.1):
         super().__init__()
         # load MobileNetV3-small backbone wrapper
@@ -291,5 +292,6 @@ if __name__ == '__main__':
     model.eval()
     inp = torch.randn(2, 3, 256, 256)
     out = model(inp)
+    summary(model, input_size=(3, 256, 256))
     print("Input shape:", inp.shape)
     print("Output shape:", out.shape)  # expect (2, 21, 256, 256)

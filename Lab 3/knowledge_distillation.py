@@ -309,6 +309,171 @@ def validate_kd(student_model, teacher_model, dataloader, criterion, device, num
         'iou_per_class': iou_results['iou_per_class']
     }
 
+def train_knowledge_distillation(teacher, student, train_loader, val_loader, epochs, learning_rate, T, soft_target_loss_weight, ce_loss_weight, device, save_path='best_student_kd.pth'):
+    """
+    Integrated knowledge distillation training for segmentation models.
+    
+    Args:
+        teacher: Teacher model (FCN-ResNet50)
+        student: Student model (MBV3SmallSeg) 
+        train_loader: Training DataLoader
+        val_loader: Validation DataLoader
+        epochs: Number of training epochs
+        learning_rate: Learning rate for optimizer
+        T: Temperature for knowledge distillation
+        soft_target_loss_weight: Weight for distillation loss (β)
+        ce_loss_weight: Weight for ground truth loss (α)
+        device: Device to train on
+        save_path: Path to save best model
+    """
+    # Loss functions
+    ce_loss = nn.CrossEntropyLoss(ignore_index=255)  # Ignore boundary pixels
+    optimizer = optim.AdamW(student.parameters(), lr=learning_rate, weight_decay=1e-4)
+    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
+    
+    teacher.eval()  # Teacher set to evaluation mode
+    student.train() # Student to train mode
+    
+    # Tracking
+    best_miou = 0.0
+    epochs_without_improvement = 0
+    patience = 10
+    
+    print(f"\nStarting Knowledge Distillation Training...")
+    print(f"Temperature: {T}, CE Weight: {ce_loss_weight}, KD Weight: {soft_target_loss_weight}")
+    print("="*80)
+
+    for epoch in range(epochs):
+        student.train()
+        running_loss = 0.0
+        running_ce_loss = 0.0
+        running_kd_loss = 0.0
+        num_batches = len(train_loader)
+        
+        for batch_idx, (inputs, labels) in enumerate(train_loader):
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+
+            # Forward pass with the teacher model - do not save gradients
+            with torch.no_grad():
+                teacher_logits = teacher(inputs)
+                
+                # Resize teacher output to match student if needed  
+                if teacher_logits.shape != inputs.shape:
+                    teacher_logits = F.interpolate(
+                        teacher_logits, 
+                        size=inputs.shape[2:], 
+                        mode='bilinear', 
+                        align_corners=False
+                    )
+
+            # Forward pass with the student model
+            student_logits = student(inputs)
+            
+            # Ensure teacher and student outputs have same spatial dimensions
+            if teacher_logits.shape != student_logits.shape:
+                teacher_logits = F.interpolate(
+                    teacher_logits, 
+                    size=student_logits.shape[2:], 
+                    mode='bilinear', 
+                    align_corners=False
+                )
+
+            # Soften the logits by applying temperature scaling
+            soft_targets = F.softmax(teacher_logits / T, dim=1)
+            soft_student = F.log_softmax(student_logits / T, dim=1)
+
+            # Calculate the soft targets loss (KL divergence)
+            # Use mean reduction to match segmentation scale
+            soft_targets_loss = F.kl_div(soft_student, soft_targets, reduction='batchmean') * (T**2)
+
+            # Calculate the true label loss  
+            label_loss = ce_loss(student_logits, labels)
+
+            # Weighted sum of the two losses
+            loss = soft_target_loss_weight * soft_targets_loss + ce_loss_weight * label_loss
+
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+            running_ce_loss += label_loss.item()
+            running_kd_loss += soft_targets_loss.item()
+            
+            # Print progress
+            if (batch_idx + 1) % 50 == 0:
+                print(f"  Epoch [{epoch+1}] Batch [{batch_idx+1}/{num_batches}] "
+                      f"Total: {loss.item():.4f} CE: {label_loss.item():.4f} KD: {soft_targets_loss.item():.4f}")
+
+        # Validation
+        student.eval()
+        val_miou = validate_segmentation_model(student, val_loader, device)
+        
+        # Update scheduler
+        scheduler.step(val_miou)
+        
+        # Print epoch summary
+        avg_loss = running_loss / len(train_loader)
+        avg_ce = running_ce_loss / len(train_loader) 
+        avg_kd = running_kd_loss / len(train_loader)
+        
+        print(f"\nEpoch {epoch+1}/{epochs}")
+        print(f"  Train - Total: {avg_loss:.4f} CE: {avg_ce:.4f} KD: {avg_kd:.4f}")
+        print(f"  Val mIoU: {val_miou:.4f}")
+        print(f"  LR: {optimizer.param_groups[0]['lr']:.2e}")
+        
+        # Save best model
+        if val_miou > best_miou:
+            best_miou = val_miou
+            epochs_without_improvement = 0
+            
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': student.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'val_miou': val_miou,
+                'distillation_params': {
+                    'temperature': T,
+                    'ce_weight': ce_loss_weight,
+                    'kd_weight': soft_target_loss_weight
+                }
+            }, save_path)
+            print(f"  ✓ New best mIoU! Model saved to {save_path}")
+        else:
+            epochs_without_improvement += 1
+            print(f"  No improvement for {epochs_without_improvement} epoch(s)")
+        
+        print("-" * 60)
+        
+        # Early stopping
+        if epochs_without_improvement >= patience:
+            print(f"Early stopping triggered after {epoch+1} epochs")
+            break
+    
+    print(f"\nTraining complete! Best mIoU: {best_miou:.4f}")
+    return best_miou
+
+
+def validate_segmentation_model(model, val_loader, device, num_classes=21):
+    """
+    Validate segmentation model and compute mIoU.
+    """
+    model.eval()
+    iou_metric = IoUMetric(num_classes=num_classes, ignore_index=255)
+    
+    with torch.no_grad():
+        for images, masks in val_loader:
+            images = images.to(device, non_blocking=True)
+            masks = masks.to(device, non_blocking=True)
+            
+            logits = model(images)
+            preds = torch.argmax(logits, dim=1)
+            iou_metric.update(preds, masks)
+    
+    results = iou_metric.compute()
+    return results['miou']
+
 
 # ---------------------------
 # Main knowledge distillation training
@@ -324,8 +489,8 @@ def main():
     PATIENCE = 10
     
     # Knowledge distillation parameters
-    ALPHA = 0.7  # Weight for ground truth loss (increased to prioritize ground truth)
-    BETA = 0.3   # Weight for distillation loss (reduced to prevent overwhelming)
+    ALPHA = 0.75  # Weight for ground truth loss (ce_loss_weight)
+    BETA = 0.25   # Weight for distillation loss (soft_target_loss_weight) 
     TEMPERATURE = 4.0  # Temperature for knowledge distillation
     
     # Paths
@@ -409,117 +574,28 @@ def main():
     print(f"Student total params: {student_total_params:,}")
     print(f"Student trainable params: {student_trainable_params:,}")
     
-    # Loss function and optimizer
-    criterion = DistillationLoss(
-        alpha=ALPHA, 
-        beta=BETA, 
-        temperature=TEMPERATURE, 
-        ignore_index=255
-    )
-    
-    optimizer = optim.AdamW(
-        student_model.parameters(), 
-        lr=LEARNING_RATE, 
-        weight_decay=WEIGHT_DECAY
-    )
-    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
-    
-    # Training loop
+    # Run integrated knowledge distillation training
     print("\n" + "="*80)
-    print("Starting Knowledge Distillation Training...")
+    print("Starting Integrated Knowledge Distillation Training...")
     print(f"Teacher: FCN-ResNet50 ({teacher_params:,} params)")
     print(f"Student: MBV3SmallSeg ({student_trainable_params:,} trainable params)")
-    print(f"α={ALPHA}, β={BETA}, T={TEMPERATURE}")
+    print(f"CE Weight: {ALPHA}, KD Weight: {BETA}, Temperature: {TEMPERATURE}")
     print("="*80)
     
-    best_miou = 0.0
-    epochs_without_improvement = 0
-    time_start = time.time()
-    
-    def sec_to_hms(s):
-        s = int(max(0, s))
-        h = s // 3600
-        m = (s % 3600) // 60
-        sec = s % 60
-        return f"{h:02d}:{m:02d}:{sec:02d}"
-    
-    for epoch in range(1, NUM_EPOCHS + 1):
-        epoch_start = time.time()
-        
-        # Train
-        train_losses = train_one_epoch_kd(
-            student_model, teacher_model, train_loader, criterion, optimizer, device, epoch
-        )
-        
-        # Validate
-        val_results = validate_kd(
-            student_model, teacher_model, val_loader, criterion, device, num_classes=NUM_CLASSES
-        )
-        
-        epoch_time = time.time() - epoch_start
-        
-        # Update scheduler
-        scheduler.step(val_results['miou'])
-        
-        # Print epoch summary
-        print(f"\n{'='*80}")
-        print(f"Epoch [{epoch}/{NUM_EPOCHS}] Summary:")
-        print(f"  Train - Total: {train_losses['total_loss']:.4f} "
-              f"CE: {train_losses['ce_loss']:.4f} KD: {train_losses['kd_loss']:.4f}")
-        print(f"  Val   - Total: {val_results['total_loss']:.4f} "
-              f"CE: {val_results['ce_loss']:.4f} KD: {val_results['kd_loss']:.4f}")
-        print(f"  Val mIoU:     {val_results['miou']:.4f}")
-        print(f"  Time:         {epoch_time:.1f}s")
-        print(f"  LR:           {optimizer.param_groups[0]['lr']:.2e}")
-        
-        # Timing information
-        elapsed = time.time() - time_start
-        avg_per_epoch = elapsed / epoch
-        remaining = avg_per_epoch * (NUM_EPOCHS - epoch)
-        print(f"  Elapsed: {sec_to_hms(elapsed)} | Left: {sec_to_hms(remaining)} | Per Epoch: {sec_to_hms(avg_per_epoch)}")
-        
-        # Save best model
-        if val_results['miou'] > best_miou:
-            best_miou = val_results['miou']
-            epochs_without_improvement = 0
-            
-            # Check if we started from pre-trained weights
-            pretrained_info = {}
-            if Path('best_model.pth').exists():
-                try:
-                    orig_checkpoint = torch.load('best_model.pth', map_location='cpu', weights_only=False)
-                    pretrained_info = {
-                        'initialized_from': 'best_model.pth',
-                        'original_epoch': orig_checkpoint.get('epoch', 'unknown'),
-                        'original_val_miou': orig_checkpoint.get('val_miou', 'unknown')
-                    }
-                except:
-                    pretrained_info = {'initialized_from': 'best_model.pth', 'load_error': True}
-            
-            torch.save({
-                'epoch': epoch,
-                'student_state_dict': student_model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'val_miou': val_results['miou'],
-                'val_total_loss': val_results['total_loss'],
-                'distillation_params': {
-                    'alpha': ALPHA,
-                    'beta': BETA,
-                    'temperature': TEMPERATURE
-                },
-                'pretrained_info': pretrained_info
-            }, BEST_MODEL_PATH)
-            print(f"  ✓ New best mIoU! Student model saved to {BEST_MODEL_PATH}")
-        else:
-            epochs_without_improvement += 1
-            print(f"  No improvement for {epochs_without_improvement} epoch(s)")
-        
-        print(f"{'='*80}\n")
-        
-        # Early stopping
-        if epochs_without_improvement >= PATIENCE:
-            print(f"Early stopping triggered after {epoch} epochs (patience={PATIENCE})")
-            break
+    # Train using the integrated function
+    best_miou = train_knowledge_distillation(
+        teacher=teacher_model,
+        student=student_model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        epochs=NUM_EPOCHS,
+        learning_rate=LEARNING_RATE,
+        T=TEMPERATURE,
+        soft_target_loss_weight=BETA,  # β for distillation loss
+        ce_loss_weight=ALPHA,         # α for ground truth loss
+        device=device,
+        save_path=str(BEST_MODEL_PATH)
+    )
     
     print("\n" + "="*80)
     print("Knowledge Distillation Training Complete!")
