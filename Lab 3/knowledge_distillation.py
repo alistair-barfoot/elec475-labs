@@ -767,26 +767,15 @@ def main():
     print("Loading student model (MBV3SmallSeg)...")
     student_model = MBV3SmallSeg(
         num_classes=NUM_CLASSES,
-        backbone_pretrained=True,
+        backbone_pretrained=True,  # Only backbone pretrained, not the full model
         input_size=IMG_SIZE,
         dropout=0.1
     )
     
-    # Load pre-trained weights from best_model.pth if available
-    pretrained_model_path = Path('best_model.pth')
-    if pretrained_model_path.exists():
-        print(f"Loading pre-trained student weights from {pretrained_model_path}...")
-        try:
-            checkpoint = torch.load(pretrained_model_path, map_location='cpu', weights_only=False)
-            student_model.load_state_dict(checkpoint['model_state_dict'])
-            print(f"✓ Successfully loaded pre-trained weights (epoch {checkpoint.get('epoch', 'unknown')})")
-            print(f"  Pre-trained validation mIoU: {checkpoint.get('val_miou', 'unknown')}")
-        except Exception as e:
-            print(f"⚠️  Could not load pre-trained weights: {e}")
-            print("  Continuing with randomly initialized student model...")
-    else:
-        print(f"⚠️  Pre-trained model not found at {pretrained_model_path}")
-        print("  Starting with randomly initialized student model...")
+    # Start with only backbone pretrained - do not load pre-trained segmentation weights
+    # This gives a better baseline for knowledge distillation evaluation
+    print("✓ Student model initialized with backbone pretrained weights only")
+    print("  Segmentation head randomly initialized for knowledge distillation")
     
     student_model = student_model.to(device)
     
