@@ -2,6 +2,6 @@
 \contentsline {section}{\numberline {1}Network Architecture}{2}{section.1}%
 \contentsline {section}{\numberline {2}Knowledge Distillation}{2}{section.2}%
 \contentsline {section}{\numberline {3}Hyperparameters}{3}{section.3}%
-\contentsline {section}{\numberline {4}Results}{3}{section.4}%
-\contentsline {section}{\numberline {5}Performance}{4}{section.5}%
-\contentsline {section}{\numberline {6}LLM Usage}{5}{section.6}%
+\contentsline {section}{\numberline {4}Results}{5}{section.4}%
+\contentsline {section}{\numberline {5}Performance}{6}{section.5}%
+\contentsline {section}{\numberline {6}LLM Usage}{7}{section.6}%
