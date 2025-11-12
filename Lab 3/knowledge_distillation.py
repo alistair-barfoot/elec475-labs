@@ -24,6 +24,7 @@ import numpy as np
 import time
 import argparse
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 from MobileNet_model import MBV3SmallSeg
 from dataloader import get_voc_dataloader
@@ -85,6 +86,24 @@ Examples:
                         default=0.25,
                         help='Weight for distillation loss (default: 0.25)')
     
+    parser.add_argument('--save-plots',
+                        action='store_true',
+                        help='Save training/validation plots (default: False)')
+    
+    parser.add_argument('--no-warm-start',
+                        action='store_true',
+                        help='Disable warm start from best_model.pth (default: warm start enabled)')
+    
+    parser.add_argument('--plot-suffix',
+                        type=str,
+                        default='',
+                        help='Suffix to add to plot filenames (e.g., "--plot-suffix exp1" creates plots with "_exp1" suffix)')
+    
+    parser.add_argument('--plot-prefix',
+                        type=str,
+                        default='',
+                        help='Prefix to add to plot filenames (e.g., "--plot-prefix warmstart" creates plots with "warmstart_" prefix)')
+    
     args = parser.parse_args()
     
     # If no method specified, default to response-based
@@ -115,7 +134,7 @@ class DistillationLoss(nn.Module):
         self.beta = beta
         self.temperature = temperature
         self.ignore_index = ignore_index
-        
+    
         # Standard cross-entropy for ground truth
         self.ce_loss = nn.CrossEntropyLoss(ignore_index=ignore_index)
         
@@ -310,7 +329,7 @@ def train_one_epoch_kd(student_model, teacher_model, dataloader, criterion, opti
         
         # Print progress every 50 batches
         if (batch_idx + 1) % 50 == 0:
-            print(f"  Epoch [{epoch}] Batch [{batch_idx+1}/{num_batches}] "
+            print(f"  Epoch [{epoch+1}] Batch [{batch_idx+1}/{num_batches}] "
                   f"Total: {total_loss.item():.4f} CE: {ce_loss.item():.4f} KD: {kd_loss.item():.4f}")
     
     return {
@@ -374,7 +393,7 @@ def validate_kd(student_model, teacher_model, dataloader, criterion, device, num
         'iou_per_class': iou_results['iou_per_class']
     }
 
-def train_knowledge_distillation(teacher, student, train_loader, val_loader, epochs, learning_rate, T, soft_target_loss_weight, ce_loss_weight, device, save_path='best_student_kd.pth'):
+def train_knowledge_distillation(teacher, student, train_loader, val_loader, epochs, learning_rate, T, soft_target_loss_weight, ce_loss_weight, device, save_path='best_student_kd.pth', save_plots=False, method_name='response-based', plot_prefix='', plot_suffix=''):
     """
     Integrated knowledge distillation training for segmentation models.
     
@@ -390,11 +409,15 @@ def train_knowledge_distillation(teacher, student, train_loader, val_loader, epo
         ce_loss_weight: Weight for ground truth loss (α)
         device: Device to train on
         save_path: Path to save best model
+        save_plots: Whether to save training plots
+        method_name: Name of distillation method for plots
+        plot_prefix: Prefix for plot filenames
+        plot_suffix: Suffix for plot filenames
     """
     # Loss functions
     ce_loss = nn.CrossEntropyLoss(ignore_index=255)  # Ignore boundary pixels
-    optimizer = optim.AdamW(student.parameters(), lr=learning_rate, weight_decay=1e-4)
-    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
+    optimizer = optim.AdamW(student.parameters(), lr=learning_rate, weight_decay=5e-4)  # Increased regularization
+    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)  # More aggressive LR reduction
     
     teacher.eval()  # Teacher set to evaluation mode
     student.train() # Student to train mode
@@ -404,11 +427,21 @@ def train_knowledge_distillation(teacher, student, train_loader, val_loader, epo
     epochs_without_improvement = 0
     patience = 10
     
+    # Lists to track training history
+    train_losses = {'total': [], 'ce': [], 'kd': []}
+    val_losses = {'total': [], 'ce': [], 'kd': []}
+    val_miou_history = []
+    epoch_times = []
+    
     print(f"\nStarting Knowledge Distillation Training...")
     print(f"Temperature: {T}, CE Weight: {ce_loss_weight}, KD Weight: {soft_target_loss_weight}")
     print("="*80)
+    
+    # Start overall training timer
+    training_start_time = time.time()
 
     for epoch in range(epochs):
+        epoch_start_time = time.time()
         student.train()
         running_loss = 0.0
         running_ce_loss = 0.0
@@ -475,18 +508,99 @@ def train_knowledge_distillation(teacher, student, train_loader, val_loader, epo
         student.eval()
         val_miou = validate_segmentation_model(student, val_loader, device)
         
+        # Compute validation losses
+        student.eval()
+        val_total_loss = 0.0
+        val_ce_loss = 0.0
+        val_kd_loss = 0.0
+        val_batches = 0
+        
+        with torch.no_grad():
+            for inputs, labels in val_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                
+                # Teacher forward pass
+                teacher_logits = teacher(inputs)
+                if teacher_logits.shape != inputs.shape:
+                    teacher_logits = F.interpolate(
+                        teacher_logits, 
+                        size=inputs.shape[2:], 
+                        mode='bilinear', 
+                        align_corners=False
+                    )
+                
+                # Student forward pass
+                student_logits = student(inputs)
+                
+                if teacher_logits.shape != student_logits.shape:
+                    teacher_logits = F.interpolate(
+                        teacher_logits, 
+                        size=student_logits.shape[2:], 
+                        mode='bilinear', 
+                        align_corners=False
+                    )
+                
+                # Compute validation losses
+                soft_targets = F.softmax(teacher_logits / T, dim=1)
+                soft_student = F.log_softmax(student_logits / T, dim=1)
+                soft_targets_loss = F.kl_div(soft_student, soft_targets, reduction='batchmean') * (T**2)
+                label_loss = ce_loss(student_logits, labels)
+                total_loss = soft_target_loss_weight * soft_targets_loss + ce_loss_weight * label_loss
+                
+                val_total_loss += total_loss.item()
+                val_ce_loss += label_loss.item()
+                val_kd_loss += soft_targets_loss.item()
+                val_batches += 1
+        
         # Update scheduler
         scheduler.step(val_miou)
         
-        # Print epoch summary
+        # Calculate training averages
         avg_loss = running_loss / len(train_loader)
         avg_ce = running_ce_loss / len(train_loader) 
         avg_kd = running_kd_loss / len(train_loader)
         
-        print(f"\nEpoch {epoch+1}/{epochs}")
+        # Record losses and metrics
+        train_losses['total'].append(avg_loss)
+        train_losses['ce'].append(avg_ce)
+        train_losses['kd'].append(avg_kd)
+        
+        val_losses['total'].append(val_total_loss / val_batches)
+        val_losses['ce'].append(val_ce_loss / val_batches)
+        val_losses['kd'].append(val_kd_loss / val_batches)
+        
+        val_miou_history.append(val_miou)
+        
+        # Calculate epoch timing
+        epoch_end_time = time.time()
+        epoch_duration = epoch_end_time - epoch_start_time
+        epoch_times.append(epoch_duration)
+        
+        # Estimate remaining time
+        avg_epoch_time = np.mean(epoch_times)
+        remaining_epochs = epochs - (epoch + 1)
+        estimated_time_remaining = remaining_epochs * avg_epoch_time
+        
+        # Format time strings
+        def format_time(seconds):
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            secs = int(seconds % 60)
+            if hours > 0:
+                return f"{hours:02d}h {minutes:02d}m {secs:02d}s"
+            elif minutes > 0:
+                return f"{minutes:02d}m {secs:02d}s"
+            else:
+                return f"{secs:02d}s"
+        
+        # Print epoch summary
+        print(f"\nEpoch {epoch+1}/{epochs} [{format_time(epoch_duration)}]")
         print(f"  Train - Total: {avg_loss:.4f} CE: {avg_ce:.4f} KD: {avg_kd:.4f}")
+        print(f"  Val   - Total: {val_total_loss/val_batches:.4f} CE: {val_ce_loss/val_batches:.4f} KD: {val_kd_loss/val_batches:.4f}")
         print(f"  Val mIoU: {val_miou:.4f}")
         print(f"  LR: {optimizer.param_groups[0]['lr']:.2e}")
+        if remaining_epochs > 0:
+            print(f"  ETA: {format_time(estimated_time_remaining)} (avg {format_time(avg_epoch_time)}/epoch)")
         
         # Save best model
         if val_miou > best_miou:
@@ -516,10 +630,45 @@ def train_knowledge_distillation(teacher, student, train_loader, val_loader, epo
             print(f"Early stopping triggered after {epoch+1} epochs")
             break
     
+    # Calculate total training time
+    training_end_time = time.time()
+    total_training_time = training_end_time - training_start_time
+    
+    def format_time(seconds):
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        if hours > 0:
+            return f"{hours:02d}h {minutes:02d}m {secs:02d}s"
+        elif minutes > 0:
+            return f"{minutes:02d}m {secs:02d}s"
+        else:
+            return f"{secs:02d}s"
+    
     print(f"\nTraining complete! Best mIoU: {best_miou:.4f}")
+    print(f"Total training time: {format_time(total_training_time)}")
+    if epoch_times:
+        print(f"Average time per epoch: {format_time(np.mean(epoch_times))}")
+        print(f"Fastest epoch: {format_time(np.min(epoch_times))}")
+        print(f"Slowest epoch: {format_time(np.max(epoch_times))}")
+    
+    # Create training plots if requested
+    if save_plots:
+        print("\nGenerating training plots...")
+        plot_training_history(
+            train_losses=train_losses,
+            val_losses=val_losses,
+            train_miou=[],  # No train mIoU computed during training for efficiency
+            val_miou=val_miou_history,
+            method_name=method_name,
+            save_dir='./plots',
+            plot_prefix=plot_prefix,
+            plot_suffix=plot_suffix
+        )
+    
     return best_miou
 
-def train_cosine_loss(teacher, student, train_loader, val_loader, epochs, learning_rate, hidden_rep_loss_weight, ce_loss_weight, device, save_path='best_student_feature_kd.pth'):
+def train_cosine_loss(teacher, student, train_loader, val_loader, epochs, learning_rate, hidden_rep_loss_weight, ce_loss_weight, device, save_path='best_student_feature_kd.pth', save_plots=False, method_name='feature-based', plot_prefix="", plot_suffix=""):
     """
     Feature-based knowledge distillation using cosine similarity between hidden representations.
     
@@ -534,11 +683,13 @@ def train_cosine_loss(teacher, student, train_loader, val_loader, epochs, learni
         ce_loss_weight: Weight for ground truth loss
         device: Device to train on
         save_path: Path to save best model
+        save_plots: Whether to save training plots
+        method_name: Name of distillation method for plots
     """
     ce_loss = nn.CrossEntropyLoss(ignore_index=255)
     cosine_loss = nn.CosineEmbeddingLoss()
-    optimizer = optim.AdamW(student.parameters(), lr=learning_rate, weight_decay=1e-4)
-    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
+    optimizer = optim.AdamW(student.parameters(), lr=learning_rate, weight_decay=5e-4)  # Increased regularization
+    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)  # More aggressive LR reduction
 
     teacher.to(device)
     student.to(device)
@@ -550,11 +701,21 @@ def train_cosine_loss(teacher, student, train_loader, val_loader, epochs, learni
     epochs_without_improvement = 0
     patience = 10
     
+    # Lists to track training history
+    train_losses = {'total': [], 'ce': [], 'feature': []}
+    val_losses = {'total': [], 'ce': [], 'feature': []}
+    val_miou_history = []
+    epoch_times = []
+    
     print(f"\nStarting Feature-based Knowledge Distillation Training...")
     print(f"CE Weight: {ce_loss_weight}, Feature Weight: {hidden_rep_loss_weight}")
     print("="*80)
+    
+    # Start overall training timer
+    training_start_time = time.time()
 
     for epoch in range(epochs):
+        epoch_start_time = time.time()
         student.train()
         running_loss = 0.0
         running_ce_loss = 0.0
@@ -618,18 +779,99 @@ def train_cosine_loss(teacher, student, train_loader, val_loader, epochs, learni
         student.eval()
         val_miou = validate_segmentation_model(student, val_loader, device)
         
+        # Compute validation losses
+        student.eval()
+        val_total_loss = 0.0
+        val_ce_loss = 0.0
+        val_feature_loss = 0.0
+        val_batches = 0
+        
+        with torch.no_grad():
+            for inputs, labels in val_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                
+                # Teacher forward pass
+                teacher_logits = teacher(inputs)
+                teacher_hidden = teacher_logits.view(teacher_logits.size(0), -1)
+                
+                # Student forward pass
+                student_logits = student(inputs)
+                
+                # Ensure teacher and student outputs have same spatial dimensions
+                if teacher_logits.shape != student_logits.shape:
+                    teacher_logits = F.interpolate(
+                        teacher_logits, 
+                        size=student_logits.shape[2:], 
+                        mode='bilinear', 
+                        align_corners=False
+                    )
+                    teacher_hidden = teacher_logits.view(teacher_logits.size(0), -1)
+                
+                student_hidden = student_logits.view(student_logits.size(0), -1)
+                
+                # Compute validation losses
+                hidden_rep_loss = cosine_loss(
+                    student_hidden, 
+                    teacher_hidden, 
+                    target=torch.ones(inputs.size(0)).to(device)
+                )
+                label_loss = ce_loss(student_logits, labels)
+                total_loss = hidden_rep_loss_weight * hidden_rep_loss + ce_loss_weight * label_loss
+                
+                val_total_loss += total_loss.item()
+                val_ce_loss += label_loss.item()
+                val_feature_loss += hidden_rep_loss.item()
+                val_batches += 1
+        
         # Update scheduler
         scheduler.step(val_miou)
         
-        # Print epoch summary
+        # Calculate training averages
         avg_loss = running_loss / len(train_loader)
         avg_ce = running_ce_loss / len(train_loader) 
         avg_feature = running_feature_loss / len(train_loader)
         
-        print(f"\nEpoch {epoch+1}/{epochs}")
+        # Record losses and metrics
+        train_losses['total'].append(avg_loss)
+        train_losses['ce'].append(avg_ce)
+        train_losses['feature'].append(avg_feature)
+        
+        val_losses['total'].append(val_total_loss / val_batches)
+        val_losses['ce'].append(val_ce_loss / val_batches)
+        val_losses['feature'].append(val_feature_loss / val_batches)
+        
+        val_miou_history.append(val_miou)
+        
+        # Calculate epoch timing
+        epoch_end_time = time.time()
+        epoch_duration = epoch_end_time - epoch_start_time
+        epoch_times.append(epoch_duration)
+        
+        # Estimate remaining time
+        avg_epoch_time = np.mean(epoch_times)
+        remaining_epochs = epochs - (epoch + 1)
+        estimated_time_remaining = remaining_epochs * avg_epoch_time
+        
+        # Format time strings
+        def format_time(seconds):
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            secs = int(seconds % 60)
+            if hours > 0:
+                return f"{hours:02d}h {minutes:02d}m {secs:02d}s"
+            elif minutes > 0:
+                return f"{minutes:02d}m {secs:02d}s"
+            else:
+                return f"{secs:02d}s"
+        
+        # Print epoch summary
+        print(f"\nEpoch {epoch+1}/{epochs} [{format_time(epoch_duration)}]")
         print(f"  Train - Total: {avg_loss:.4f} CE: {avg_ce:.4f} Feature: {avg_feature:.4f}")
+        print(f"  Val   - Total: {val_total_loss/val_batches:.4f} CE: {val_ce_loss/val_batches:.4f} Feature: {val_feature_loss/val_batches:.4f}")
         print(f"  Val mIoU: {val_miou:.4f}")
         print(f"  LR: {optimizer.param_groups[0]['lr']:.2e}")
+        if remaining_epochs > 0:
+            print(f"  ETA: {format_time(estimated_time_remaining)} (avg {format_time(avg_epoch_time)}/epoch)")
         
         # Save best model
         if val_miou > best_miou:
@@ -659,7 +901,42 @@ def train_cosine_loss(teacher, student, train_loader, val_loader, epochs, learni
             print(f"Early stopping triggered after {epoch+1} epochs")
             break
     
+    # Calculate total training time
+    training_end_time = time.time()
+    total_training_time = training_end_time - training_start_time
+    
+    def format_time(seconds):
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        if hours > 0:
+            return f"{hours:02d}h {minutes:02d}m {secs:02d}s"
+        elif minutes > 0:
+            return f"{minutes:02d}m {secs:02d}s"
+        else:
+            return f"{secs:02d}s"
+    
     print(f"\nFeature-based training complete! Best mIoU: {best_miou:.4f}")
+    print(f"Total training time: {format_time(total_training_time)}")
+    if epoch_times:
+        print(f"Average time per epoch: {format_time(np.mean(epoch_times))}")
+        print(f"Fastest epoch: {format_time(np.min(epoch_times))}")
+        print(f"Slowest epoch: {format_time(np.max(epoch_times))}")
+    
+    # Create training plots if requested
+    if save_plots:
+        print("\nGenerating training plots...")
+        plot_training_history(
+            train_losses=train_losses,
+            val_losses=val_losses,
+            train_miou=[],  # No train mIoU computed during training for efficiency
+            val_miou=val_miou_history,
+            method_name=method_name,
+            save_dir='./plots',
+            plot_prefix=plot_prefix,
+            plot_suffix=plot_suffix
+        )
+    
     return best_miou
 
 
@@ -681,6 +958,138 @@ def validate_segmentation_model(model, val_loader, device, num_classes=21):
     
     results = iou_metric.compute()
     return results['miou']
+
+
+# ---------------------------
+# Plotting utilities
+# ---------------------------
+def plot_training_history(train_losses, val_losses, train_miou, val_miou, method_name, save_dir='./plots', plot_prefix='', plot_suffix=''):
+    """
+    Plot training and validation losses and mIoU over epochs.
+    
+    Args:
+        train_losses: dict with keys 'total', 'ce', 'kd' containing lists of training losses
+        val_losses: dict with keys 'total', 'ce', 'kd' containing lists of validation losses  
+        train_miou: list of training mIoU values per epoch
+        val_miou: list of validation mIoU values per epoch
+        method_name: name of distillation method for plot title
+        save_dir: directory to save plots
+        plot_prefix: prefix for plot filenames
+        plot_suffix: suffix for plot filenames
+    """
+    save_dir = Path(save_dir)
+    save_dir.mkdir(exist_ok=True)
+    
+    epochs = range(1, len(val_miou) + 1)
+    
+    # Create figure with subplots
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
+    fig.suptitle(f'Knowledge Distillation Training History ({method_name})', fontsize=16, fontweight='bold')
+    
+    # Plot 1: Total Loss
+    ax1.plot(epochs, train_losses['total'], 'b-', label='Train Total Loss', linewidth=2)
+    ax1.plot(epochs, val_losses['total'], 'r-', label='Val Total Loss', linewidth=2)
+    ax1.set_title('Total Loss', fontweight='bold')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Plot 2: Cross-Entropy Loss
+    ax2.plot(epochs, train_losses['ce'], 'b-', label='Train CE Loss', linewidth=2)
+    ax2.plot(epochs, val_losses['ce'], 'r-', label='Val CE Loss', linewidth=2)
+    ax2.set_title('Cross-Entropy Loss', fontweight='bold')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('CE Loss')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    
+    # Plot 3: Distillation Loss (KD or Feature)
+    kd_label = 'KD Loss' if 'kd' in train_losses else 'Feature Loss'
+    kd_key = 'kd' if 'kd' in train_losses else 'feature'
+    ax3.plot(epochs, train_losses[kd_key], 'b-', label=f'Train {kd_label}', linewidth=2)
+    ax3.plot(epochs, val_losses[kd_key], 'r-', label=f'Val {kd_label}', linewidth=2)
+    ax3.set_title(f'{kd_label}', fontweight='bold')
+    ax3.set_xlabel('Epoch')
+    ax3.set_ylabel(f'{kd_label}')
+    ax3.legend()
+    ax3.grid(True, alpha=0.3)
+    
+    # Plot 4: mIoU
+    if train_miou:  # Only plot train mIoU if available
+        ax4.plot(epochs, train_miou, 'b-', label='Train mIoU', linewidth=2)
+    ax4.plot(epochs, val_miou, 'r-', label='Val mIoU', linewidth=2)
+    ax4.set_title('Mean IoU', fontweight='bold')
+    ax4.set_xlabel('Epoch')
+    ax4.set_ylabel('mIoU')
+    ax4.legend()
+    ax4.grid(True, alpha=0.3)
+    
+    # Highlight best validation mIoU
+    best_epoch = np.argmax(val_miou) + 1
+    best_miou = max(val_miou)
+    ax4.axvline(x=best_epoch, color='g', linestyle='--', alpha=0.7)
+    ax4.annotate(f'Best: {best_miou:.3f}\n@Epoch {best_epoch}', 
+                xy=(best_epoch, best_miou), 
+                xytext=(best_epoch + len(epochs)*0.1, best_miou),
+                arrowprops=dict(arrowstyle='->', color='green', alpha=0.7),
+                fontsize=10, color='green', fontweight='bold')
+    
+    plt.tight_layout()
+    
+    # Generate plot filename with prefix and suffix
+    base_filename = f'kd_training_history_{method_name.replace("-", "_")}'
+    if plot_prefix:
+        base_filename = f'{plot_prefix}_{base_filename}'
+    if plot_suffix:
+        base_filename = f'{base_filename}_{plot_suffix}'
+    
+    # Save plot
+    plot_filename = f'{base_filename}.png'
+    plot_path = save_dir / plot_filename
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"Training history plot saved to: {plot_path}")
+    
+    # Also save a simple loss comparison plot
+    plt.figure(figsize=(12, 5))
+    
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses['total'], 'b-', label='Train Total', linewidth=2)
+    plt.plot(epochs, val_losses['total'], 'r-', label='Val Total', linewidth=2)
+    plt.title(f'Total Loss ({method_name})', fontweight='bold')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    plt.subplot(1, 2, 2)
+    if train_miou:
+        plt.plot(epochs, train_miou, 'b-', label='Train mIoU', linewidth=2)
+    plt.plot(epochs, val_miou, 'r-', label='Val mIoU', linewidth=2)
+    plt.axvline(x=best_epoch, color='g', linestyle='--', alpha=0.7, label=f'Best ({best_miou:.3f})')
+    plt.title(f'Mean IoU ({method_name})', fontweight='bold')
+    plt.xlabel('Epoch')
+    plt.ylabel('mIoU')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    
+    # Generate simple plot filename with prefix and suffix
+    simple_base_filename = f'kd_loss_miou_{method_name.replace("-", "_")}'
+    if plot_prefix:
+        simple_base_filename = f'{plot_prefix}_{simple_base_filename}'
+    if plot_suffix:
+        simple_base_filename = f'{simple_base_filename}_{plot_suffix}'
+    
+    # Save simple plot
+    simple_plot_filename = f'{simple_base_filename}.png'
+    simple_plot_path = save_dir / simple_plot_filename
+    plt.savefig(simple_plot_path, dpi=300, bbox_inches='tight')
+    print(f"Loss/mIoU plot saved to: {simple_plot_path}")
+    
+    plt.show()  # Display plots
+    plt.close('all')  # Close figures to free memory
 
 
 # ---------------------------
@@ -767,14 +1176,32 @@ def main():
     print("Loading student model (MBV3SmallSeg)...")
     student_model = MBV3SmallSeg(
         num_classes=NUM_CLASSES,
-        backbone_pretrained=True,  # Only backbone pretrained, not the full model
+        backbone_pretrained=True,
         input_size=IMG_SIZE,
         dropout=0.1
     )
     
-    # Start with only backbone pretrained - do not load pre-trained segmentation weights
-    # This gives a better baseline for knowledge distillation evaluation
-    print("✓ Student model initialized with backbone pretrained weights only")
+    # Load pre-trained segmentation weights for warm start (RECOMMENDED for overfitting prevention)
+    pretrained_model_path = Path('best_model.pth')
+    if pretrained_model_path.exists() and not args.no_warm_start:
+        print(f"🔥 WARM START: Loading pre-trained segmentation weights from {pretrained_model_path}...")
+        try:
+            checkpoint = torch.load(pretrained_model_path, map_location='cpu', weights_only=False)
+            student_model.load_state_dict(checkpoint['model_state_dict'])
+            baseline_miou = checkpoint.get('val_miou', 'unknown')
+            baseline_epoch = checkpoint.get('epoch', 'unknown')
+            print(f"✅ Warm start successful!")
+            print(f"   Starting from: {baseline_miou:.4f} mIoU (epoch {baseline_epoch})")
+            print(f"   Benefits: Faster convergence, reduced overfitting risk")
+        except Exception as e:
+            print(f"⚠️  Could not load warm start weights: {e}")
+            print("   Continuing with backbone-only initialization...")
+    else:
+        if args.no_warm_start:
+            print(f"🚫 Warm start disabled by --no-warm-start flag")
+        else:
+            print(f"ℹ️  No warm start model found at {pretrained_model_path}")
+        print("   Starting with backbone pretrained weights only")
     print("  Segmentation head randomly initialized for knowledge distillation")
     
     student_model = student_model.to(device)
@@ -808,7 +1235,11 @@ def main():
             soft_target_loss_weight=BETA,  # β for distillation loss
             ce_loss_weight=ALPHA,         # α for ground truth loss
             device=device,
-            save_path=str(BEST_MODEL_PATH)
+            save_path=str(BEST_MODEL_PATH),
+            save_plots=args.save_plots,
+            method_name=method_name,
+            plot_prefix=args.plot_prefix,
+            plot_suffix=args.plot_suffix
         )
     else:
         # Feature-based distillation
@@ -822,7 +1253,11 @@ def main():
             hidden_rep_loss_weight=BETA,  # β for feature similarity loss
             ce_loss_weight=ALPHA,         # α for ground truth loss
             device=device,
-            save_path=str(BEST_MODEL_PATH)
+            save_path=str(BEST_MODEL_PATH),
+            save_plots=args.save_plots,
+            method_name=method_name,
+            plot_prefix=args.plot_prefix,
+            plot_suffix=args.plot_suffix
         )
     
     print("\n" + "="*80)
