@@ -152,7 +152,7 @@ def load_trained_model(checkpoint_path, num_classes=21, device='cpu'):
     
     print(f"✓ Model loaded successfully!")
     print(f"  Trained for {checkpoint_info['epoch']} epochs")
-    if checkpoint_info['val_miou'] != 'unknown':
+    if checkpoint_info['val_miou'] != 'unknown' and checkpoint_info['val_loss'] != 'unknown':
         print(f"  Best validation mIoU: {checkpoint_info['val_miou']:.4f}")
         print(f"  Best validation loss: {checkpoint_info['val_loss']:.4f}")
     else:
@@ -398,7 +398,7 @@ def save_results_summary(results, checkpoint_info, save_path='test_results.txt')
         
         f.write("Model Information:\n")
         f.write(f"  Checkpoint epoch: {checkpoint_info['epoch']}\n")
-        if checkpoint_info['val_miou'] != 'unknown':
+        if checkpoint_info['val_miou'] != 'unknown' and checkpoint_info['val_loss'] != 'unknown':
             f.write(f"  Training val mIoU: {checkpoint_info['val_miou']:.4f}\n")
             f.write(f"  Training val loss: {checkpoint_info['val_loss']:.4f}\n\n")
         else:
