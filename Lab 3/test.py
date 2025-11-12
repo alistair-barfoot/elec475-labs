@@ -185,13 +185,32 @@ def evaluate_model(model, dataloader, device, num_classes=21):
     confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     
+    # Timing variables for inference speed
+    total_inference_time = 0.0
+    num_samples = 0
+    
     with torch.no_grad():
         for batch_idx, (images, masks) in enumerate(dataloader):
             images = images.to(device, non_blocking=True)
             masks = masks.to(device, non_blocking=True)
             
+            # Time the inference
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
+            
+            start_time = time.time()
+            
             # Forward pass
             logits = model(images)
+            
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
+            
+            inference_time = time.time() - start_time
+            total_inference_time += inference_time
+            num_samples += images.shape[0]
+            
+            # Compute loss
             loss = criterion(logits, masks)
             total_loss += loss.item()
             
@@ -234,11 +253,17 @@ def evaluate_model(model, dataloader, device, num_classes=21):
     
     # Compute final metrics
     avg_loss = total_loss / num_batches
+    avg_inference_time_per_sample = total_inference_time / num_samples if num_samples > 0 else 0.0
+    throughput_fps = num_samples / total_inference_time if total_inference_time > 0 else 0.0
     
     results = {
         'loss': avg_loss,
         'miou': mean_iou,
-        'iou_per_class': iou_per_class
+        'iou_per_class': iou_per_class,
+        'total_inference_time': total_inference_time,
+        'avg_inference_time_per_sample': avg_inference_time_per_sample,
+        'throughput_fps': throughput_fps,
+        'num_samples': num_samples
     }
     
     return results
@@ -251,6 +276,13 @@ def print_detailed_results(results, class_names=VOC_CLASSES):
     print(f"{'='*60}")
     print(f"Average Loss: {results['loss']:.4f}")
     print(f"Mean IoU (mIoU): {results['miou']:.4f} ({results['miou']*100:.2f}%)")
+    
+    # Display inference speed metrics
+    print(f"\nInference Speed:")
+    print(f"Total inference time: {results['total_inference_time']:.3f}s")
+    print(f"Average time per sample: {results['avg_inference_time_per_sample']*1000:.2f}ms")
+    print(f"Throughput: {results['throughput_fps']:.1f} FPS")
+    print(f"Samples processed: {results['num_samples']}")
     
     print(f"\nPer-class IoU:")
     print(f"{'Class':<15} {'IoU':<8} {'Percentage'}")
