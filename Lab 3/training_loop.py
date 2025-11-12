@@ -17,6 +17,9 @@ import numpy as np
 import time
 from pathlib import Path
 from torchsummary import summary
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 from MobileNet_model import MBV3SmallSeg
 from dataloader import get_voc_dataloader
 
@@ -83,6 +86,55 @@ class IoUMetric:
             'miou': miou,
             'iou_per_class': iou
         }
+
+
+def plot_training_history(train_losses, val_losses, val_mious, save_path='training_history.png'):
+    """
+    Create a visualization with both loss and mIoU plots in a single PNG file.
+    
+    Args:
+        train_losses: List of training losses per epoch
+        val_losses: List of validation losses per epoch 
+        val_mious: List of validation mIoU values per epoch
+        save_path: Path to save the PNG file
+    """
+    # Create figure with subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    epochs = range(1, len(train_losses) + 1)
+    
+    # Loss plot
+    ax1.plot(epochs, train_losses, 'b-', label='Train Loss', linewidth=2)
+    ax1.plot(epochs, val_losses, 'r-', label='Val Loss', linewidth=2)
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.set_title('Training and Validation Loss')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # mIoU plot
+    ax2.plot(epochs, val_mious, 'g-', label='Val mIoU', linewidth=2)
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('mIoU')
+    ax2.set_title('Validation Mean IoU')
+    
+    # Add best mIoU annotation
+    best_miou = max(val_mious)
+    best_epoch = val_mious.index(best_miou) + 1
+    ax2.axhline(y=best_miou, color='g', linestyle='--', alpha=0.7)
+    ax2.text(0.05, 0.95, f'Best: {best_miou:.4f} (Epoch {best_epoch})', 
+             transform=ax2.transAxes, verticalalignment='top',
+             bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.7))
+    
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    
+    # Adjust layout and save
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Training history plot saved to: {save_path}")
 
 
 def check_model_sanity(model, dataloader, device, num_classes=21):
@@ -344,6 +396,11 @@ def main():
     best_miou = 0.0
     epochs_without_improvement = 0
     
+    # Track metrics for plotting
+    train_losses = []
+    val_losses = []
+    val_mious = []
+    
     for epoch in range(1, NUM_EPOCHS + 1):
         epoch_start = time.time()
         
@@ -356,6 +413,11 @@ def main():
         val_miou = val_results['miou']
         
         epoch_time = time.time() - epoch_start
+        
+        # Track metrics for plotting
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+        val_mious.append(val_miou)
         
         # OneCycleLR is updated per batch, no need to call here
         
@@ -390,6 +452,10 @@ def main():
         if epochs_without_improvement >= PATIENCE:
             print(f"Early stopping triggered after {epoch} epochs (patience={PATIENCE})")
             break
+    
+    # Generate training history plot
+    if train_losses:  # Only plot if we have data
+        plot_training_history(train_losses, val_losses, val_mious, 'training_history.png')
     
     print("\n" + "="*60)
     print("Training complete!")
