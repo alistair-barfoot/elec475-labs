@@ -1,0 +1,3 @@
+python test.py --results --visualize
+python test.py --results --visualize --checkpoint 'best_warmstart_response_kd.pth'
+python test.py --results --visualize --checkpoint 'best_warmstart_feature_kd.pth'
