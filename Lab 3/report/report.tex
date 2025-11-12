@@ -87,11 +87,30 @@ and the total loss is thus calculated as:
 
 All of the models were trained for 50 epochs with a patience of 10 epochs for early stopping. The learning rate was set to $1e-3$ for the non-KD model and $1e-4$ for the KD models. The batch size was set to 16 for all models. The optimizer used was AdamW with a weight decay of $1e-4$. \\
 \\
-For the knowledge distillation models, the temperature $T$ was set to 3.5 and the weights $\alpha$ and $\beta$ were set to 0.9 and 0.1 respectively for both response-based and feature-based distillation.
+For the knowledge distillation models, the temperature $T$ was set to 3.5 and the weights $\alpha$ and $\beta$ were set to 0.9 and 0.1 respectively for both response-based and feature-based distillation.\\
+\\
+The loss and mIoU graphs are as follows:
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=\textwidth]{imgs/training_history.png}
+\end{figure}
+\newpage
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=0.75\textwidth]{imgs/warmstart__kd_training_history_feature_based__feature.png}
+\end{figure}
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=0.75\textwidth]{imgs/warmstart__kd_training_history_response_based__response.png}
+\end{figure}
+
 \section{Results}
 
 The hardware used was a NVIDIA 3060 Super Laptop Edition with 6 GB of VRAM. Our experiments started extremely poorly with the best mIoU reaching at best 5\% after 10 epochs and failing to improve. A test was made to ensure all parts of initialization were working well. There was a server initialization problem as the initial logits had a range $\begin{bmatrix}-8595 & 7014\end{bmatrix}$.
-After fixing the Initial logits the mIoU improved to 44\% after 47 epochs. The model not only worked as intended it worked very well for a model with around 1 million parameters.\\
+After fixing the Initial logits the mIoU improved to 42\% after 47 epochs. The model not only worked as intended it worked very well for a model with around 1 million parameters.\\
 \\
 The time per epoch for the original model without knowledge distillation was 107 seconds. For both the Response-based and Feature-based knowledge distillation the average time per epoch was 134 seconds.\\
 \begin{table}[h]
@@ -99,13 +118,13 @@ The time per epoch for the original model without knowledge distillation was 107
   \caption{Knowledge Distillation Results}
   \begin{tabular}{|c|c|c|c|}
     \hline
-    \textbf{Knowledge Distillation} & \textbf{mIoU} & \textbf{\# Parameters} & \textbf{Inference Speed} \\
+    \textbf{Knowledge Distillation} & \textbf{mIoU} & \textbf{\# Parameters} & \textbf{Inference Speed (ms/sample)} \\
     \hline
-    Without                         &               & 1414805                &                          \\
+    Without                         & 0.426         & 1414805                & 3.97                                 \\
     \hline
-    Response-Based                  & 0.426         & 1414805                &                          \\
+    Response-Based                  & 0.426         & 1414805                & 3.79                                 \\
     \hline
-    Feature-Based                   & 0.459         & 1414805                &                          \\
+    Feature-Based                   & 0.459         & 1414805                & 3.49                                 \\
     \hline
   \end{tabular}
 \end{table}
@@ -123,7 +142,7 @@ The time per epoch for the original model without knowledge distillation was 107
 \end{figure}
 \newpage
 \section{Performance}
-The performance of the MobileNetV3 custom system was overall successful. The system without knowledge distillation was already quite good with an mIoU of 44\%. The knowledge distillation started off creating a model with a worse mIoU of that of the original model. The first epoch had an mIoU of 30\% with a warm start and that created confusion as to if the model was working correctly. A run was done without any pretrained weights but ended up with a loss higher than that of the warm start. The response based knowledge distillation ultimately did worse than that of the model without any knowledge distillation, achieving a score of 42\% mIoU. The feature-based knowledge distillation did help the model by 1\% in mIoU. It makes sense that feature-based distillation did better since it gives the student model a more full understanding of the teacher-model, not just the outputs.
+The performance of the MobileNetV3 custom system was overall successful. The system without knowledge distillation was already quite good with an mIoU of 42\%. The knowledge distillation started off creating a model with a worse mIoU of that of the original model. The first epoch had an mIoU of 30\% with a warm start and that created confusion as to if the model was working correctly. A run was done without any pretrained weights but ended up with a loss higher than that of the warm start. The response based knowledge distillation ultimately did the same as the model without any knowledge distillation, achieving a score of 42\% mIoU. The feature-based knowledge distillation did help the model by 4\% in mIoU. It makes sense that feature-based distillation did better since it gives the student model a more full understanding of the teacher-model, not just the outputs.
 
 \begin{table}[h]
   \centering
