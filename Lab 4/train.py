@@ -16,7 +16,7 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Subset
+from torch.utils.data import Subset, DataLoader
 import matplotlib.pyplot as plt
 
 from model import CLIPModel
@@ -102,36 +102,60 @@ def validate(model, dataloader, device):
 
 
 def train(args):
-    set_seed(42)
+    set_seed(int(time.time()))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     
-    # Dataloaders
-    train_loader = create_dataloader(
+    # Create datasets first (before DataLoader)
+    from dataloader import COCODataset, get_default_transforms
+    
+    train_transform = get_default_transforms(image_size=(224, 224))
+    train_dataset = COCODataset(
         dataset='train',
-        batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=4 if device.type == 'cuda' else 0,
-        image_size=(224, 224),
-        load_annotations=True
+        transform=train_transform,
+        load_annotations=True,
+        image_size=(224, 224)
     )
     
-    val_loader = create_dataloader(
+    val_transform = get_default_transforms(image_size=(224, 224))
+    val_dataset = COCODataset(
         dataset='val',
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=4 if device.type == 'cuda' else 0,
-        image_size=(224, 224),
-        load_annotations=True
+        transform=val_transform,
+        load_annotations=True,
+        image_size=(224, 224)
     )
     
     # Apply subset if specified
     if args.train_subset > 0:
-        train_loader.dataset = build_subset(train_loader.dataset, args.train_subset, 42)
-        print(f"Training on subset: {len(train_loader.dataset)} images")
+        train_dataset = build_subset(train_dataset, args.train_subset, int(time.time()))
+        print(f"Training on subset: {len(train_dataset)} images")
     
-    print(f"Train samples: {len(train_loader.dataset)}")
-    print(f"Val samples: {len(val_loader.dataset)}")
+    if args.val_subset > 0:
+        val_dataset = build_subset(val_dataset, args.val_subset, int(time.time()))
+        print(f"Validation on subset: {len(val_dataset)} images")
+    
+    print(f"Train samples: {len(train_dataset)}")
+    print(f"Val samples: {len(val_dataset)}")
+    
+    # Create DataLoaders with (possibly subsetted) datasets
+    from dataloader import collate_fn
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=4 if device.type == 'cuda' else 0,
+        pin_memory=torch.cuda.is_available(),
+        collate_fn=collate_fn
+    )
+    
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4 if device.type == 'cuda' else 0,
+        pin_memory=torch.cuda.is_available(),
+        collate_fn=collate_fn
+    )
     
     # Model
     model = CLIPModel(embedding_dim=512, pretrained_image=True).to(device)
@@ -145,11 +169,13 @@ def train(args):
     
     train_losses = []
     val_losses = []
+    best_val_loss = float('inf')
     start_time = time.time()
     
     base_dataset = train_loader.dataset.dataset if isinstance(train_loader.dataset, Subset) else train_loader.dataset
     
     for epoch in range(1, args.epochs + 1):
+        epoch_start = time.time()
         model.train()
         epoch_loss = 0.0
         batches = 0
@@ -181,33 +207,76 @@ def train(args):
         train_losses.append(avg_train)
         
         # Validation
+        val_start = time.time()
         avg_val = validate(model, val_loader, device)
         val_losses.append(avg_val)
+        val_time = time.time() - val_start
+        
+        # Timing calculations
+        epoch_time = time.time() - epoch_start
+        elapsed_time = time.time() - start_time
+        avg_epoch_time = elapsed_time / epoch
+        remaining_epochs = args.epochs - epoch
+        eta_seconds = avg_epoch_time * remaining_epochs
+        eta_minutes = eta_seconds / 60
+        eta_hours = eta_minutes / 60
+        
+        # Inference speed (ms/image during validation)
+        val_images = len(val_loader.dataset)
+        inference_speed = (val_time / val_images * 1000) if val_time > 0 else 0
+        
+        # Estimated finish time
+        import datetime
+        finish_time = datetime.datetime.now() + datetime.timedelta(seconds=eta_seconds)
+        finish_str = finish_time.strftime("%H:%M:%S")
         
         print(f"Epoch {epoch:02d}/{args.epochs} | Train Loss: {avg_train:.4f} | Val Loss: {avg_val:.4f}")
+        epoch_hours = int(epoch_time // 3600)
+        epoch_minutes = int((epoch_time % 3600) // 60)
+        elapsed_minutes = int(elapsed_time // 60)
+        print(f"  Time: {epoch_hours}h{epoch_minutes:02d}m | Elapsed: {elapsed_minutes}m | ETA: {int(eta_hours)}h{int(eta_minutes % 60):02d}m (finish ~{finish_str}) | Inference: {inference_speed:.1f} ms")
+
+        # Save model checkpoint if validation improves
+        if avg_val < best_val_loss or epoch == 1:
+            best_val_loss = avg_val
+            Path("outputs").mkdir(exist_ok=True)
+            best_ckpt_path = Path("outputs") / "best_clip.pth"
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_loss': avg_train,
+                'val_loss': avg_val,
+                'train_losses': train_losses,
+                'val_losses': val_losses,
+                'config': {'lr': args.lr, 'epochs': args.epochs, 'batch_size': args.batch_size}
+            }, best_ckpt_path)
+            print(f"  ✓ New best model saved (val_loss: {avg_val:.4f})")
+        
+        # Save plot after each epoch
+        if args.save_plot:
+            Path("outputs").mkdir(exist_ok=True)
+            plot_path = Path("outputs") / args.save_plot
+            
+            plt.figure(figsize=(8, 5))
+            plt.plot(train_losses, label="Train Loss", marker='o')
+            plt.plot(val_losses, label="Val Loss", marker='s')
+            plt.xlabel("Epoch")
+            plt.ylabel("InfoNCE Loss")
+            plt.title(f"CLIP Training Loss Curves (Epoch {epoch}/{args.epochs})")
+            plt.legend()
+            plt.grid(alpha=0.3)
+            plt.tight_layout()
+            plt.savefig(plot_path, dpi=150)
+            plt.close()
     
     total_time = time.time() - start_time
-    print(f"\nTotal training time: {total_time/60:.2f} minutes")
+    print(f"\nTotal training time: {total_time/3600:.2f}h{total_time/60 % 60:.2f}m")
+    print(f"Inference speed: {inference_speed:.1f} ms/image")
     print(f"Hardware: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+    print(f"Best validation loss: {best_val_loss:.4f}")
     
-    # Save plot
-    if args.save_plot:
-        Path("outputs").mkdir(exist_ok=True)
-        plot_path = Path("outputs") / args.save_plot
-        
-        plt.figure(figsize=(8, 5))
-        plt.plot(train_losses, label="Train Loss", marker='o')
-        plt.plot(val_losses, label="Val Loss", marker='s')
-        plt.xlabel("Epoch")
-        plt.ylabel("InfoNCE Loss")
-        plt.title("CLIP Training Loss Curves")
-        plt.legend()
-        plt.grid(alpha=0.3)
-        plt.tight_layout()
-        plt.savefig(plot_path, dpi=150)
-        print(f"Loss curves saved to: {plot_path}")
-    
-    # Save checkpoint
+    # Save final checkpoint
     ckpt_path = Path("outputs") / "final_clip.pth"
     torch.save({
         'model_state_dict': model.state_dict(),
@@ -225,6 +294,8 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("--train-subset", type=int, default=0, 
                         help="Use only N training samples (0 = all). For tuning hyperparams on small subset.")
+    parser.add_argument("--val-subset", type=int, default=0, 
+                        help="Use only N validation samples (0 = all). For faster validation during tuning.")
     parser.add_argument("--save-plot", type=str, default="loss_curves.png", 
                         help="Filename for loss curve plot")
     return parser.parse_args()
