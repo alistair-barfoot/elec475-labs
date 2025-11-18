@@ -5,12 +5,14 @@ Features:
 - ResNet50 pretrained on ImageNet
 - Projection head mapping to 512-dim CLIP embedding space
 - Frozen text encoder (trainable image path only)
+- InfoNCE contrastive loss for training
 """
 
 import torch
 import torch.nn as nn
 from torchvision import models
 from torchvision.models import ResNet50_Weights
+from typing import Optional
 
 
 class ImageEncoder(nn.Module):
@@ -179,6 +181,74 @@ class CLIPModel(nn.Module):
         return trainable
 
 
+class InfoNCELoss(nn.Module):
+    """
+    InfoNCE (contrastive) loss for CLIP-style training.
+    
+    This is the contrastive loss that aligns image-text pairs by treating
+    each pair in the batch as positive, and all other pairs as negatives.
+    
+    The loss is computed symmetrically:
+    - Image-to-text: For each image, predict which text it matches
+    - Text-to-image: For each text, predict which image it matches
+    """
+    
+    def __init__(self, temperature: float = 0.07):
+        """
+        Args:
+            temperature: Temperature parameter for scaling logits (default 0.07)
+                        Lower temperature = sharper distributions
+        """
+        super().__init__()
+        self.temperature = temperature
+    
+    def forward(self, image_embeddings: torch.Tensor, 
+                text_embeddings: torch.Tensor, 
+                logit_scale: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """
+        Compute InfoNCE loss between image and text embeddings.
+        
+        Args:
+            image_embeddings: (B, embedding_dim) L2-normalized image features
+            text_embeddings: (B, embedding_dim) L2-normalized text features
+            logit_scale: Optional learned temperature (if None, uses self.temperature)
+        
+        Returns:
+            loss: Scalar contrastive loss value
+            
+        Note:
+            Assumes embeddings are already L2-normalized (as done in the encoders)
+        """
+        batch_size = image_embeddings.shape[0]
+        
+        # Use learned logit_scale if provided, else use fixed temperature
+        if logit_scale is None:
+            logit_scale = 1.0 / self.temperature
+        
+        # Compute cosine similarity matrix: (B, B)
+        # logits[i,j] = similarity between image i and text j
+        logits = logit_scale * (image_embeddings @ text_embeddings.T)
+        
+        # Ground truth: diagonal elements are positive pairs
+        # labels[i] = i means image i matches with text i
+        labels = torch.arange(batch_size, device=logits.device)
+        
+        # Compute cross-entropy loss in both directions
+        
+        # Image-to-text direction:
+        # For each image, predict which text it matches (rows of logits)
+        loss_i2t = nn.functional.cross_entropy(logits, labels)
+        
+        # Text-to-image direction:
+        # For each text, predict which image it matches (columns of logits)
+        loss_t2i = nn.functional.cross_entropy(logits.T, labels)
+        
+        # Average both directions (symmetric loss)
+        loss = (loss_i2t + loss_t2i) / 2.0
+        
+        return loss
+
+
 # ---------------------------
 # Smoke test / usage example
 # ---------------------------
@@ -231,7 +301,25 @@ if __name__ == '__main__':
     print(f"\nSimilarity matrix shape: {similarity.shape}")
     print(f"Similarity range: [{similarity.min().item():.2f}, {similarity.max().item():.2f}]")
     
+    # Test InfoNCE loss
+    print("\n" + "="*60)
+    print("Testing InfoNCE Loss")
+    print("="*60)
+    
+    loss_fn = InfoNCELoss(temperature=0.07)
+    
+    # Test with learned logit_scale from model
+    loss_with_scale = loss_fn(image_embeds, text_embeds, logit_scale)
+    print(f"InfoNCE loss (with learned scale): {loss_with_scale.item():.4f}")
+    
+    # Test with default temperature
+    loss_default = loss_fn(image_embeds, text_embeds, logit_scale=None)
+    print(f"InfoNCE loss (default temp): {loss_default.item():.4f}")
+    
+    # Verify loss is differentiable
+    loss_with_scale.backward()
+    print("✓ Loss is differentiable (backward pass successful)")
+    
     print("\n" + "="*60)
     print("✓ All checks passed!")
     print("="*60)
-    
