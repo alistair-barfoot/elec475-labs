@@ -205,27 +205,20 @@ class COCODataset(Dataset):
         
         return dict(sorted(class_counts.items(), key=lambda x: x[1], reverse=True))
 
-def get_default_transforms(image_size: Tuple[int, int] = (224, 224), 
-                          normalize: bool = True) -> transforms.Compose:
+def get_default_transforms(image_size: Tuple[int, int] = (224, 224)) -> transforms.Compose:
     """Get default image transforms for COCO dataset"""
     transform_list = [
         transforms.Resize(image_size),
         transforms.ToTensor(),
+        transforms.Normalize(mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711])
     ]
-    
-    if normalize:
-        # ImageNet normalization
-        transform_list.append(
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                               std=[0.229, 0.224, 0.225])
-        )
     
     return transforms.Compose(transform_list)
 
 def get_augmentation_transforms(image_size: Tuple[int, int] = (224, 224)) -> transforms.Compose:
     """Get augmentation transforms for training"""
     return transforms.Compose([
-        transforms.Resize((int(image_size[0] * 1.1), int(image_size[1] * 1.1))),
+        transforms.Resize(image_size),
         transforms.RandomCrop(image_size),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
