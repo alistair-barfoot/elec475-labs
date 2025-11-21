@@ -170,6 +170,8 @@ def train(args):
     train_losses = []
     val_losses = []
     best_val_loss = float('inf')
+    patience = 5
+    patience_counter = 0
     start_time = time.time()
     
     base_dataset = train_loader.dataset.dataset if isinstance(train_loader.dataset, Subset) else train_loader.dataset
@@ -231,14 +233,26 @@ def train(args):
         finish_str = finish_time.strftime("%H:%M:%S")
         
         print(f"Epoch {epoch:02d}/{args.epochs} | Train Loss: {avg_train:.4f} | Val Loss: {avg_val:.4f}")
+        
+        # Format time as hh:mm:ss
         epoch_hours = int(epoch_time // 3600)
         epoch_minutes = int((epoch_time % 3600) // 60)
-        elapsed_minutes = int(elapsed_time // 60)
-        print(f"  Time: {epoch_hours}h{epoch_minutes:02d}m | Elapsed: {elapsed_minutes}m | ETA: {int(eta_hours)}h{int(eta_minutes % 60):02d}m (finish ~{finish_str}) | Inference: {inference_speed:.1f} ms")
+        epoch_seconds = int(epoch_time % 60)
+        
+        elapsed_hours = int(elapsed_time // 3600)
+        elapsed_minutes = int((elapsed_time % 3600) // 60)
+        elapsed_seconds = int(elapsed_time % 60)
+        
+        eta_hours_int = int(eta_hours)
+        eta_minutes_int = int(eta_minutes % 60)
+        eta_seconds_int = int(eta_seconds % 60)
+        
+        print(f"  Time: {epoch_hours:02d}:{epoch_minutes:02d}:{epoch_seconds:02d} | Elapsed: {elapsed_hours:02d}:{elapsed_minutes:02d}:{elapsed_seconds:02d} | ETA: {eta_hours_int:02d}:{eta_minutes_int:02d}:{eta_seconds_int:02d} (finish ~{finish_str}) | Inference: {inference_speed:.1f} ms")
 
         # Save model checkpoint if validation improves
-        if avg_val < best_val_loss or epoch == 1:
+        if avg_val < best_val_loss:
             best_val_loss = avg_val
+            patience_counter = 0
             Path("outputs").mkdir(exist_ok=True)
             best_ckpt_path = Path("outputs") / "best_clip.pth"
             torch.save({
@@ -252,26 +266,36 @@ def train(args):
                 'config': {'lr': args.lr, 'epochs': args.epochs, 'batch_size': args.batch_size}
             }, best_ckpt_path)
             print(f"  ✓ New best model saved (val_loss: {avg_val:.4f})")
+        else:
+            patience_counter += 1
+            print(f"  No improvement (patience: {patience_counter}/{patience})")
+            
+            if patience_counter >= patience:
+                print(f"\n⚠ Early stopping triggered after {epoch} epochs (no improvement for {patience} epochs)")
+                break
         
         # Save plot after each epoch
-        if args.save_plot:
-            Path("outputs").mkdir(exist_ok=True)
-            plot_path = Path("outputs") / args.save_plot
-            
-            plt.figure(figsize=(8, 5))
-            plt.plot(train_losses, label="Train Loss", marker='o')
-            plt.plot(val_losses, label="Val Loss", marker='s')
-            plt.xlabel("Epoch")
-            plt.ylabel("InfoNCE Loss")
-            plt.title(f"CLIP Training Loss Curves (Epoch {epoch}/{args.epochs})")
-            plt.legend()
-            plt.grid(alpha=0.3)
-            plt.tight_layout()
-            plt.savefig(plot_path, dpi=150)
-            plt.close()
+        Path("outputs").mkdir(exist_ok=True)
+        plot_path = Path("outputs") / args.save_plot
+        
+        plt.figure(figsize=(8, 5))
+        plt.plot(train_losses, label="Train Loss", marker='o')
+        plt.plot(val_losses, label="Val Loss", marker='s')
+        plt.xlabel("Epoch")
+        plt.ylabel("InfoNCE Loss")
+        plt.title(f"CLIP Training Loss Curves (Epoch {epoch}/{args.epochs})")
+        plt.legend()
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(plot_path, dpi=150)
+        plt.close()
     
     total_time = time.time() - start_time
-    print(f"\nTotal training time: {total_time/3600:.2f}h{total_time/60 % 60:.2f}m")
+    total_hours = int(total_time // 3600)
+    total_minutes = int((total_time % 3600) // 60)
+    total_seconds = int(total_time % 60)
+    
+    print(f"\nTotal training time: {total_hours:02d}:{total_minutes:02d}:{total_seconds:02d}")
     print(f"Inference speed: {inference_speed:.1f} ms/image")
     print(f"Hardware: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
     print(f"Best validation loss: {best_val_loss:.4f}")
