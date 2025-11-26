@@ -9,6 +9,7 @@ Evaluates trained CLIP model on validation set with:
 """
 
 import argparse
+import os
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
@@ -179,9 +180,11 @@ def text_to_image_retrieval(text_query, model, dataloader, device, top_k=5):
     for idx in top_k_indices:
         if isinstance(base_dataset, Subset):
             actual_idx = base_dataset.indices[idx]
-            img_path = base_dataset.dataset.image_paths[actual_idx]
+            img_filename = base_dataset.dataset.image_files[actual_idx]
+            img_path = os.path.join(base_dataset.dataset.images_path, img_filename)
         else:
-            img_path = base_dataset.image_paths[idx]
+            img_filename = base_dataset.image_files[idx]
+            img_path = os.path.join(base_dataset.images_path, img_filename)
         
         img = Image.open(img_path).convert('RGB')
         top_images.append(img)
@@ -374,10 +377,207 @@ def main(args):
     print(f"    Mean: {off_diagonal.mean().item():.4f}")
     print(f"    Std: {off_diagonal.std().item():.4f}")
     
-    # Text-based image retrieval visualization
+    # Visualize similarity matrix
+    print(f"\n{'='*60}")
+    print("SIMILARITY MATRIX VISUALIZATION")
+    print(f"{'='*60}")
+    
+    Path("outputs/visualizations").mkdir(parents=True, exist_ok=True)
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    
+    # Plot similarity matrix heatmap
+    im1 = axes[0].imshow(sim_matrix[:50, :50].numpy(), cmap='viridis', aspect='auto')
+    axes[0].set_title('Similarity Matrix (First 50 samples)', fontsize=12, fontweight='bold')
+    axes[0].set_xlabel('Text Index')
+    axes[0].set_ylabel('Image Index')
+    plt.colorbar(im1, ax=axes[0], label='Cosine Similarity')
+    
+    # Plot distribution comparison
+    axes[1].hist(diagonal.numpy(), bins=30, alpha=0.7, label='Correct Pairs (Diagonal)', color='green')
+    axes[1].hist(off_diagonal.flatten().numpy(), bins=30, alpha=0.7, label='Incorrect Pairs', color='red')
+    axes[1].set_xlabel('Similarity Score')
+    axes[1].set_ylabel('Frequency')
+    axes[1].set_title('Similarity Score Distribution', fontsize=12, fontweight='bold')
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    sim_matrix_path = Path("outputs/visualizations") / "similarity_matrix.png"
+    plt.savefig(sim_matrix_path, dpi=150, bbox_inches='tight')
+    print(f"Saved similarity matrix visualization to: {sim_matrix_path}")
+    plt.show()
+    
+    # Visualize actual image-text pair examples with performance
+    print(f"\n{'='*60}")
+    print("IMAGE-TEXT PAIR EXAMPLES WITH SIMILARITY SCORES")
+    print(f"{'='*60}")
+    
+    # Get actual dataset for loading images
+    base_dataset = val_loader.dataset.dataset if isinstance(val_loader.dataset, Subset) else val_loader.dataset
+    
+    # Select diverse samples: best matches, worst matches, and average matches
+    n_samples = min(12, len(diagonal))
+    
+    # Get indices for best, worst, and medium performing pairs
+    sorted_indices = diagonal.argsort(descending=True)
+    best_indices = sorted_indices[:4].tolist()
+    worst_indices = sorted_indices[-4:].tolist()
+    medium_indices = sorted_indices[len(sorted_indices)//2 - 2:len(sorted_indices)//2 + 2].tolist()
+    
+    sample_indices = best_indices + medium_indices + worst_indices
+    sample_categories = ['Best Match'] * 4 + ['Medium Match'] * 4 + ['Worst Match'] * 4
+    
+    fig, axes = plt.subplots(3, 4, figsize=(16, 12))
+    fig.suptitle('Image-Text Pair Examples Ranked by Similarity Score', fontsize=16, fontweight='bold')
+    
+    for idx, (sample_idx, category) in enumerate(zip(sample_indices, sample_categories)):
+        row = idx // 4
+        col = idx % 4
+        ax = axes[row, col]
+        
+        # Get the actual image
+        if isinstance(val_loader.dataset, Subset):
+            actual_idx = val_loader.dataset.indices[sample_idx]
+            img_filename = base_dataset.image_files[actual_idx]
+            img_path = os.path.join(base_dataset.images_path, img_filename)
+            _, labels, _ = base_dataset._get_image_annotations(img_filename)
+        else:
+            img_filename = base_dataset.image_files[sample_idx]
+            img_path = os.path.join(base_dataset.images_path, img_filename)
+            _, labels, _ = base_dataset._get_image_annotations(img_filename)
+        
+        # Load and display image
+        img = Image.open(img_path).convert('RGB')
+        ax.imshow(img)
+        
+        # Get caption
+        caption = get_caption_from_labels(labels, base_dataset)
+        similarity = diagonal[sample_idx].item()
+        
+        # Color code by performance
+        if category == 'Best Match':
+            color = 'green'
+        elif category == 'Worst Match':
+            color = 'red'
+        else:
+            color = 'orange'
+        
+        # Truncate long captions
+        if len(caption) > 50:
+            caption = caption[:47] + '...'
+        
+        ax.set_title(f'{category}\nSim: {similarity:.3f}\n"{caption}"', 
+                    fontsize=9, color=color, fontweight='bold')
+        ax.axis('off')
+    
+    plt.tight_layout()
+    pair_examples_path = Path("outputs/visualizations") / "image_text_pair_examples.png"
+    plt.savefig(pair_examples_path, dpi=150, bbox_inches='tight')
+    print(f"Saved image-text pair examples to: {pair_examples_path}")
+    plt.show()
+    
+    # Visualize retrieval performance with examples
+    print(f"\n{'='*60}")
+    print("RETRIEVAL PERFORMANCE EXAMPLES")
+    print(f"{'='*60}")
+    
+    # Show a few examples of image-to-text retrieval
+    n_retrieval_examples = 6
+    example_indices = np.linspace(0, min(len(diagonal)-1, 100), n_retrieval_examples, dtype=int)
+    
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    fig.suptitle('Image-to-Text Retrieval: Top-5 Retrieved Texts', fontsize=14, fontweight='bold')
+    
+    for plot_idx, sample_idx in enumerate(example_indices):
+        row = plot_idx // 3
+        col = plot_idx % 3
+        ax = axes[row, col]
+        
+        # Get the image
+        if isinstance(val_loader.dataset, Subset):
+            actual_idx = val_loader.dataset.indices[sample_idx]
+            img_filename = base_dataset.image_files[actual_idx]
+            img_path = os.path.join(base_dataset.images_path, img_filename)
+            _, correct_labels, _ = base_dataset._get_image_annotations(img_filename)
+        else:
+            img_filename = base_dataset.image_files[sample_idx]
+            img_path = os.path.join(base_dataset.images_path, img_filename)
+            _, correct_labels, _ = base_dataset._get_image_annotations(img_filename)
+        
+        img = Image.open(img_path).convert('RGB')
+        
+        # Get top-5 retrieved texts for this image
+        similarities = sim_matrix[sample_idx]
+        top5_text_indices = similarities.topk(5).indices.tolist()
+        top5_scores = similarities.topk(5).values.tolist()
+        
+        # Create visualization
+        ax.imshow(img)
+        
+        # Build text showing retrieved captions
+        correct_caption = get_caption_from_labels(correct_labels, base_dataset)
+        retrieved_texts = []
+        for rank, (text_idx, score) in enumerate(zip(top5_text_indices, top5_scores), 1):
+            # Get labels for this text index
+            if isinstance(val_loader.dataset, Subset):
+                text_actual_idx = val_loader.dataset.indices[text_idx]
+                text_filename = base_dataset.image_files[text_actual_idx]
+                _, text_labels, _ = base_dataset._get_image_annotations(text_filename)
+            else:
+                text_filename = base_dataset.image_files[text_idx]
+                _, text_labels, _ = base_dataset._get_image_annotations(text_filename)
+            
+            caption = get_caption_from_labels(text_labels, base_dataset)
+            if len(caption) > 30:
+                caption = caption[:27] + '...'
+            
+            # Mark if it's the correct match
+            marker = '✓' if text_idx == sample_idx else '✗'
+            retrieved_texts.append(f"{rank}. {marker} {caption} ({score:.3f})")
+        
+        # Check if correct text is in top-5
+        rank_color = 'green' if sample_idx in top5_text_indices else 'red'
+        correct_rank = top5_text_indices.index(sample_idx) + 1 if sample_idx in top5_text_indices else '>5'
+        
+        title_text = f'Query Image (Rank: {correct_rank})\nTrue: "{correct_caption[:35]}..."'
+        ax.set_title(title_text, fontsize=8, color=rank_color, fontweight='bold')
+        ax.axis('off')
+        
+        # Add retrieved text as text below image
+        text_str = '\n'.join(retrieved_texts)
+        ax.text(0.5, -0.15, text_str, transform=ax.transAxes,
+               fontsize=7, verticalalignment='top', horizontalalignment='center',
+               bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+    
+    plt.tight_layout()
+    retrieval_examples_path = Path("outputs/visualizations") / "retrieval_performance_examples.png"
+    plt.savefig(retrieval_examples_path, dpi=150, bbox_inches='tight')
+    print(f"Saved retrieval performance examples to: {retrieval_examples_path}")
+    plt.show()
+    
+    # Automatic text-based image retrieval for common queries
+    print(f"\n{'='*60}")
+    print("AUTOMATIC TEXT-TO-IMAGE RETRIEVAL EXAMPLES")
+    print(f"{'='*60}")
+    
+    default_queries = ['person', 'animal', 'vehicle', 'food']
+    for query_idx, query in enumerate(default_queries):
+        print(f"\nQuery {query_idx+1}: '{query}'")
+        
+        top_images, top_scores, top_indices = text_to_image_retrieval(
+            query, model, val_loader, device, top_k=5
+        )
+        
+        print(f"  Top 5 scores: {[f'{s:.3f}' for s in top_scores]}")
+        
+        save_path = Path("outputs/visualizations") / f"text_retrieval_{query.replace(' ', '_')}.png"
+        visualize_text_retrieval(query, top_images, top_scores, save_path=save_path)
+    
+    # Text-based image retrieval visualization (custom queries)
     if args.text_query:
         print(f"\n{'='*60}")
-        print("TEXT-TO-IMAGE RETRIEVAL VISUALIZATION")
+        print("CUSTOM TEXT-TO-IMAGE RETRIEVAL QUERIES")
         print(f"{'='*60}")
         
         Path("outputs/visualizations").mkdir(parents=True, exist_ok=True)
