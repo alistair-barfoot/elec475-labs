@@ -13,6 +13,7 @@ import torch.nn as nn
 from torchvision import models
 from torchvision.models import ResNet50_Weights
 from typing import Optional
+import clip
 
 
 class ImageEncoder(nn.Module):
@@ -83,30 +84,36 @@ class ImageEncoder(nn.Module):
 
 class TextEncoder(nn.Module):
     """
-    Placeholder text encoder (frozen).
+    CLIP's pretrained text encoder (frozen).
     
-    In practice, you'd use a pretrained transformer (e.g., CLIP's text encoder,
-    DistilBERT, or similar). This is a simple placeholder.
+    Uses the actual text encoder from OpenAI's CLIP model (ViT-B/32 variant).
+    This is a transformer-based encoder that processes text tokens.
     """
-    def __init__(self, embedding_dim=512, vocab_size=49408, max_length=77):
+    def __init__(self, embedding_dim=512, clip_model_name="ViT-B/32"):
         """
         Args:
             embedding_dim: Output embedding dimension (512 for CLIP)
-            vocab_size: Size of text vocabulary
-            max_length: Maximum sequence length
+            clip_model_name: CLIP model variant to use (default "ViT-B/32")
         """
         super().__init__()
         self.embedding_dim = embedding_dim
         
-        # Simple transformer-like architecture (placeholder)
-        self.token_embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.positional_embedding = nn.Parameter(torch.randn(max_length, embedding_dim))
+        # Load pretrained CLIP model and extract text encoder
+        print(f"Loading CLIP text encoder from {clip_model_name}...")
+        clip_model, _ = clip.load(clip_model_name, device="cpu")
         
-        # Simple projection to match CLIP space
-        self.projection = nn.Linear(embedding_dim, embedding_dim)
+        # Extract the text encoder components from CLIP
+        self.transformer = clip_model.transformer
+        self.positional_embedding = clip_model.positional_embedding
+        self.ln_final = clip_model.ln_final
+        self.text_projection = clip_model.text_projection
+        self.token_embedding = clip_model.token_embedding
+        self.vocab_size = clip_model.vocab_size
+        self.context_length = clip_model.context_length
         
         # Freeze all parameters
         self.freeze()
+        print("✓ CLIP text encoder loaded and frozen")
     
     def forward(self, text_tokens):
         """
@@ -116,17 +123,21 @@ class TextEncoder(nn.Module):
         Returns:
             embeddings: (B, embedding_dim) text embeddings
         """
-        # Token + positional embeddings
-        x = self.token_embedding(text_tokens)  # (B, seq_len, embed_dim)
-        seq_len = x.shape[1]
-        x = x + self.positional_embedding[:seq_len]
+        # Ensure tokens are on the same device as the model
+        x = self.token_embedding(text_tokens)  # (B, seq_len, d_model)
         
-        # Pool (take mean over sequence)
-        x = x.mean(dim=1)  # (B, embed_dim)
+        x = x + self.positional_embedding
+        x = x.permute(1, 0, 2)  # (seq_len, B, d_model) - transformer expects this
+        x = self.transformer(x)
+        x = x.permute(1, 0, 2)  # (B, seq_len, d_model)
+        x = self.ln_final(x)
         
-        # Project and normalize
-        embeddings = self.projection(x)
-        embeddings = nn.functional.normalize(embeddings, p=2, dim=1)
+        # Take features from the [EOS] token (the highest number in each sequence)
+        # CLIP uses argmax to find the end-of-text token position
+        x = x[torch.arange(x.shape[0]), text_tokens.argmax(dim=-1)] @ self.text_projection
+        
+        # L2 normalize embeddings (standard for CLIP)
+        embeddings = nn.functional.normalize(x, p=2, dim=1)
         
         return embeddings
     
