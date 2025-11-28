@@ -180,9 +180,12 @@ def text_to_image_retrieval(text_query, model, dataloader, device, top_k=5):
     for idx in top_k_indices:
         if isinstance(base_dataset, Subset):
             actual_idx = base_dataset.indices[idx]
-            img_filename = base_dataset.dataset.image_files[actual_idx]
-            img_path = os.path.join(base_dataset.dataset.images_path, img_filename)
+            underlying_dataset = base_dataset.dataset
+            assert isinstance(underlying_dataset, COCODataset), "Expected COCODataset"
+            img_filename = underlying_dataset.image_files[actual_idx]
+            img_path = os.path.join(underlying_dataset.images_path, img_filename)
         else:
+            assert isinstance(base_dataset, COCODataset), "Expected COCODataset"
             img_filename = base_dataset.image_files[idx]
             img_path = os.path.join(base_dataset.images_path, img_filename)
         
@@ -209,9 +212,13 @@ def zero_shot_classification(image_path, class_labels, model, device):
     model.eval()
     
     # Load and preprocess image
+    from torchvision import transforms as T
     transform = get_default_transforms(image_size=(224, 224))
     image = Image.open(image_path).convert('RGB')
-    image_tensor = transform(image).unsqueeze(0).to(device)
+    image_tensor = transform(image)
+    if not isinstance(image_tensor, torch.Tensor):
+        image_tensor = T.ToTensor()(image_tensor)
+    image_tensor = image_tensor.unsqueeze(0).to(device)
     
     # Encode image
     with torch.no_grad():
@@ -260,7 +267,7 @@ def visualize_text_retrieval(text_query, top_images, top_scores, save_path=None)
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
         print(f"Saved visualization to: {save_path}")
     
-    plt.show()
+    plt.close()  # Close figure to free memory
 
 
 def visualize_classification(image, predictions, save_path=None):
@@ -294,7 +301,7 @@ def visualize_classification(image, predictions, save_path=None):
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
         print(f"Saved visualization to: {save_path}")
     
-    plt.show()
+    plt.close()  # Close figure to free memory
 
 
 def main(args):
@@ -368,7 +375,7 @@ def main(args):
     
     # Diagonal (correct pairs) vs off-diagonal (incorrect pairs)
     diagonal = sim_matrix.diagonal()
-    off_diagonal = sim_matrix[~torch.eye(sim_matrix.shape[0], dtype=bool)].view(sim_matrix.shape[0], -1)
+    off_diagonal = sim_matrix[~torch.eye(sim_matrix.shape[0], dtype=torch.bool)].view(sim_matrix.shape[0], -1)
     
     print(f"\n  Correct pairs (diagonal):")
     print(f"    Mean: {diagonal.mean().item():.4f}")
@@ -406,7 +413,7 @@ def main(args):
     sim_matrix_path = Path("outputs/visualizations") / "similarity_matrix.png"
     plt.savefig(sim_matrix_path, dpi=150, bbox_inches='tight')
     print(f"Saved similarity matrix visualization to: {sim_matrix_path}")
-    plt.show()
+    plt.close()  # Close figure to free memory
     
     # Visualize actual image-text pair examples with performance
     print(f"\n{'='*60}")
@@ -415,6 +422,7 @@ def main(args):
     
     # Get actual dataset for loading images
     base_dataset = val_loader.dataset.dataset if isinstance(val_loader.dataset, Subset) else val_loader.dataset
+    assert isinstance(base_dataset, COCODataset), "Expected COCODataset"
     
     # Select diverse samples: best matches, worst matches, and average matches
     n_samples = min(12, len(diagonal))
@@ -475,7 +483,7 @@ def main(args):
     pair_examples_path = Path("outputs/visualizations") / "image_text_pair_examples.png"
     plt.savefig(pair_examples_path, dpi=150, bbox_inches='tight')
     print(f"Saved image-text pair examples to: {pair_examples_path}")
-    plt.show()
+    plt.close()  # Close figure to free memory
     
     # Visualize retrieval performance with examples
     print(f"\n{'='*60}")
@@ -554,7 +562,7 @@ def main(args):
     retrieval_examples_path = Path("outputs/visualizations") / "retrieval_performance_examples.png"
     plt.savefig(retrieval_examples_path, dpi=150, bbox_inches='tight')
     print(f"Saved retrieval performance examples to: {retrieval_examples_path}")
-    plt.show()
+    plt.close()  # Close figure to free memory
     
     # Automatic text-based image retrieval for common queries
     print(f"\n{'='*60}")
@@ -631,7 +639,7 @@ def main(args):
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate CLIP model on retrieval and classification tasks")
     
-    parser.add_argument("--checkpoint", type=str, default="outputs/best_clip.pth",
+    parser.add_argument("--checkpoint", type=str, default="outputs_3_fullrun_16batchsize\\best_clip.pth",
                         help="Path to model checkpoint")
     parser.add_argument("--batch-size", type=int, default=32,
                         help="Batch size for evaluation")

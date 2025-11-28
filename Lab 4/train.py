@@ -10,17 +10,18 @@ Simplified to core arguments:
 """
 
 import argparse
-import time
+import datetime
 import random
+import time
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Subset, DataLoader
-import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader, Subset
 
+from dataloader import COCODataset, collate_fn, create_dataloader, get_default_transforms
 from model import CLIPModel
-from dataloader import create_dataloader
 
 
 def set_seed(seed: int = 42):
@@ -107,8 +108,6 @@ def train(args):
     print(f"Device: {device}")
     
     # Create datasets first (before DataLoader)
-    from dataloader import COCODataset, get_default_transforms
-    
     train_transform = get_default_transforms(image_size=(224, 224))
     train_dataset = COCODataset(
         dataset='train',
@@ -138,7 +137,6 @@ def train(args):
     print(f"Val samples: {len(val_dataset)}")
     
     # Create DataLoaders with (possibly subsetted) datasets
-    from dataloader import collate_fn
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -173,6 +171,7 @@ def train(args):
     patience = 5
     patience_counter = 0
     start_time = time.time()
+    inference_speed = 0.0
     
     base_dataset = train_loader.dataset.dataset if isinstance(train_loader.dataset, Subset) else train_loader.dataset
     
@@ -224,11 +223,10 @@ def train(args):
         eta_hours = eta_minutes / 60
         
         # Inference speed (ms/image during validation)
-        val_images = len(val_loader.dataset)
+        val_images = len(val_dataset)
         inference_speed = (val_time / val_images * 1000) if val_time > 0 else 0
         
         # Estimated finish time
-        import datetime
         finish_time = datetime.datetime.now() + datetime.timedelta(seconds=eta_seconds)
         finish_str = finish_time.strftime("%H:%M:%S")
         
