@@ -85,10 +85,19 @@ def evaluate_retrieval(model, dataloader, device, max_samples=1000):
             
         images = batch['images'].to(device)
         
-        # Build text tokens from category labels
+        # Build text tokens (prefer real captions; fallback to labels)
         text_tokens = []
-        for labels in batch['labels']:
-            caption = get_caption_from_labels(labels, base_dataset)
+        for i, labels in enumerate(batch['labels']):
+            caption_list = []
+            if 'filenames' in batch and hasattr(base_dataset, 'get_captions'):
+                try:
+                    caption_list = base_dataset.get_captions(batch['filenames'][i])
+                except Exception:
+                    caption_list = []
+            if caption_list:
+                caption = caption_list[0]
+            else:
+                caption = get_caption_from_labels(labels, base_dataset)
             text_tokens.append(simple_tokenize(caption))
         text_tokens = torch.stack(text_tokens).to(device)
         
@@ -325,7 +334,8 @@ def main(args):
         dataset='val',
         transform=val_transform,
         load_annotations=True,
-        image_size=(224, 224)
+        image_size=(224, 224),
+        load_captions=True
     )
     
     # Use subset if specified
@@ -460,8 +470,14 @@ def main(args):
         img = Image.open(img_path).convert('RGB')
         ax.imshow(img)
         
-        # Get caption
-        caption = get_caption_from_labels(labels, base_dataset)
+        # Get caption (prefer real captions)
+        caps = []
+        if hasattr(base_dataset, 'get_captions'):
+            try:
+                caps = base_dataset.get_captions(img_filename)
+            except Exception:
+                caps = []
+        caption = caps[0] if caps else get_caption_from_labels(labels, base_dataset)
         similarity = diagonal[sample_idx].item()
         
         # Color code by performance
@@ -537,7 +553,14 @@ def main(args):
                 text_filename = base_dataset.image_files[text_idx]
                 _, text_labels, _ = base_dataset._get_image_annotations(text_filename)
             
-            caption = get_caption_from_labels(text_labels, base_dataset)
+            # Caption for retrieved text index
+            rcaps = []
+            if hasattr(base_dataset, 'get_captions'):
+                try:
+                    rcaps = base_dataset.get_captions(text_filename)
+                except Exception:
+                    rcaps = []
+            caption = rcaps[0] if rcaps else get_caption_from_labels(text_labels, base_dataset)
             if len(caption) > 30:
                 caption = caption[:27] + '...'
             

@@ -66,7 +66,7 @@ def get_caption_from_labels(labels, dataset):
         if n not in seen:
             seen.add(n)
             filtered.append(n)
-    return " ".join(filtered)
+    return " ".join(sorted(filtered))
 
 
 def compute_recall_at_k(similarity_matrix, k_values=[1, 5, 10]):
@@ -121,15 +121,31 @@ def validate(model, dataloader, device, compute_retrieval_metrics=False):
     all_image_embeds = []
     all_text_embeds = []
     
-    base_dataset = dataloader.dataset.dataset if isinstance(dataloader.dataset, Subset) else dataloader.dataset
+    if isinstance(dataloader.dataset, Subset):
+        base_dataset = dataloader.dataset.dataset
+    else:
+        base_dataset = dataloader.dataset
+    assert isinstance(base_dataset, COCODataset)
     
     for batch in dataloader:
         images = batch['images'].to(device)
         
-        # Build text tokens from category labels
+        # Build text tokens (prefer real captions; fallback to labels)
         text_tokens = []
-        for labels in batch['labels']:
-            caption = get_caption_from_labels(labels, base_dataset)
+        for i, labels in enumerate(batch['labels']):
+            caption_list = []
+            if 'filenames' in batch:
+                fname = batch['filenames'][i]
+                get_captions_fn = getattr(base_dataset, 'get_captions', None)
+                if callable(get_captions_fn):
+                    try:
+                        caption_list = get_captions_fn(fname)
+                    except Exception:
+                        caption_list = []
+            if isinstance(caption_list, list) and len(caption_list) > 0:
+                caption = caption_list[0]
+            else:
+                caption = get_caption_from_labels(labels, base_dataset)
             text_tokens.append(simple_tokenize(caption))
         text_tokens = torch.stack(text_tokens).to(device)
         
@@ -195,7 +211,8 @@ def train(args):
         dataset='train',
         transform=train_transform,
         load_annotations=True,
-        image_size=(224, 224)
+        image_size=(224, 224),
+        load_captions=True
     )
     
     val_transform = get_default_transforms(image_size=(224, 224))
@@ -203,7 +220,8 @@ def train(args):
         dataset='val',
         transform=val_transform,
         load_annotations=True,
-        image_size=(224, 224)
+        image_size=(224, 224),
+        load_captions=True
     )
     
     # Apply subset if specified
@@ -241,6 +259,13 @@ def train(args):
     
     # Model
     model = CLIPModel(embedding_dim=512, pretrained_image=True).to(device)
+    if getattr(args, 'train_text', False):
+        if hasattr(model, "text_encoder") and hasattr(model.text_encoder, "parameters"):
+            for p in model.text_encoder.parameters():
+                p.requires_grad = True
+            print("[Config] Text encoder parameters set to requires_grad=True")
+        else:
+            print("[Warning] model has no text_encoder; --train-text ignored")
     
     # Optimizer
     params = [p for p in model.parameters() if p.requires_grad]
@@ -270,7 +295,11 @@ def train(args):
         best_val_loss = checkpoint.get('val_loss', float('inf'))
         print(f"Resumed from epoch {checkpoint['epoch']}, best val loss: {best_val_loss:.4f}\n")
     
-    base_dataset = train_loader.dataset.dataset if isinstance(train_loader.dataset, Subset) else train_loader.dataset
+    if isinstance(train_loader.dataset, Subset):
+        base_dataset = train_loader.dataset.dataset
+    else:
+        base_dataset = train_loader.dataset
+    assert isinstance(base_dataset, COCODataset)
     
     for epoch in range(start_epoch, args.epochs + 1):
         epoch_start = time.time()
@@ -285,10 +314,21 @@ def train(args):
         for batch in train_loader:
             images = batch['images'].to(device, non_blocking=True)
             
-            # Build text tokens from category labels
+            # Build text tokens (prefer real captions; fallback to labels)
             text_tokens = []
-            for labels in batch['labels']:
-                caption = get_caption_from_labels(labels, base_dataset)
+            for i, labels in enumerate(batch['labels']):
+                caption_list = []
+                if 'filenames' in batch:
+                    fname = batch['filenames'][i]
+                    if hasattr(base_dataset, 'get_captions'):
+                        try:
+                            caption_list = base_dataset.get_captions(fname)
+                        except Exception:
+                            caption_list = []
+                if isinstance(caption_list, list) and len(caption_list) > 0:
+                    caption = caption_list[0]
+                else:
+                    caption = get_caption_from_labels(labels, base_dataset)
                 text_tokens.append(simple_tokenize(caption))
             text_tokens = torch.stack(text_tokens).to(device)
             
@@ -443,6 +483,8 @@ def parse_args():
                         help="Filename for loss curve plot")
     parser.add_argument("--resume", type=str, default="", 
                         help="Path to checkpoint to resume from (e.g., outputs/best_clip.pth)")
+    parser.add_argument("--train-text", action="store_true", 
+                        help="Unfreeze and train the text encoder as well")
     parser.add_argument("--debug-cuda", action="store_true", help="Enable CUDA_LAUNCH_BLOCKING for debugging")
     parser.add_argument("--deterministic", action="store_true", help="Enable deterministic CUDA kernels")
     parser.add_argument("--no-epoch-cache-clear", action="store_true", help="Disable emptying CUDA cache each epoch")

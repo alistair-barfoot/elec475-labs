@@ -19,7 +19,8 @@ class COCODataset(Dataset):
                  dataset: str = 'val',
                  transform: Optional[transforms.Compose] = None,
                  load_annotations: bool = True,
-                 image_size: Tuple[int, int] = (224, 224)):
+                 image_size: Tuple[int, int] = (224, 224),
+                 load_captions: bool = True):
         """
         Initialize COCO Dataset
         
@@ -39,6 +40,7 @@ class COCODataset(Dataset):
         self.transform = transform
         self.load_annotations = load_annotations
         self.image_size = image_size
+        self.load_captions = load_captions
         
         # Define paths
         self.coco_root = os.path.join(self.archive_path, "coco2014")
@@ -51,9 +53,16 @@ class COCODataset(Dataset):
         self.annotations_data = None
         self.image_id_to_annotations = {}
         self.categories = {}
+        self.filename_to_id = {}
+
+        # Captions
+        self.captions_data = None
+        self.image_id_to_captions: Dict[int, List[str]] = {}
         
         if load_annotations and dataset in ['train', 'val']:
             self._load_annotations()
+            if self.load_captions:
+                self._load_captions()
     
     def _get_image_files(self) -> List[str]:
         """Get list of image files in the dataset directory"""
@@ -86,9 +95,9 @@ class COCODataset(Dataset):
                              for cat in self.annotations_data['categories']}
             
             # Create image filename to ID mapping
-            filename_to_id = {}
+            self.filename_to_id = {}
             for img_info in self.annotations_data['images']:
-                filename_to_id[img_info['file_name']] = img_info['id']
+                self.filename_to_id[img_info['file_name']] = img_info['id']
             
             # Group annotations by image ID
             for ann in self.annotations_data['annotations']:
@@ -99,8 +108,8 @@ class COCODataset(Dataset):
             
             # Filter image files to only include those with annotations
             self.image_files = [img_file for img_file in self.image_files 
-                              if img_file in filename_to_id and 
-                              filename_to_id[img_file] in self.image_id_to_annotations]
+                              if img_file in self.filename_to_id and 
+                              self.filename_to_id[img_file] in self.image_id_to_annotations]
             
             print(f"Loaded annotations for {len(self.image_files)} images")
             print(f"Dataset has {len(self.categories)} categories")
@@ -108,6 +117,37 @@ class COCODataset(Dataset):
         except Exception as e:
             print(f"Error loading annotations: {e}")
             self.annotations_data = None
+
+    def _load_captions(self):
+        """Load COCO caption annotations if available."""
+        captions_path = os.path.join(self.coco_root, "annotations", 
+                                     f"captions_{self.dataset}2014.json")
+        if not os.path.exists(captions_path):
+            print(f"Warning: Captions file {captions_path} does not exist")
+            return
+
+        try:
+            print(f"Loading {self.dataset} captions...")
+            with open(captions_path, 'r') as f:
+                self.captions_data = json.load(f)
+
+            # Build mapping from image_id to list of captions
+            for ann in self.captions_data.get('annotations', []):
+                image_id = ann['image_id']
+                caption = ann.get('caption', '').strip()
+                if not caption:
+                    continue
+                self.image_id_to_captions.setdefault(image_id, []).append(caption)
+
+            # Filter image_files to those having captions as well (if both present)
+            # Keep current image_files but it's fine if some have only instances
+            captions_count = sum(1 for img in self.image_files
+                                 if img in self.filename_to_id and 
+                                 self.filename_to_id[img] in self.image_id_to_captions)
+            print(f"Loaded captions for {captions_count} images")
+        except Exception as e:
+            print(f"Error loading captions: {e}")
+            self.captions_data = None
     
     def __len__(self) -> int:
         """Return the number of images in the dataset"""
@@ -173,11 +213,7 @@ class COCODataset(Dataset):
             return [], [], []
         
         # Find image ID
-        image_id = None
-        for img_info in self.annotations_data['images']:
-            if img_info['file_name'] == image_filename:
-                image_id = img_info['id']
-                break
+        image_id = self.filename_to_id.get(image_filename, None)
         
         if image_id is None or image_id not in self.image_id_to_annotations:
             return [], [], []
@@ -187,6 +223,15 @@ class COCODataset(Dataset):
         bboxes = [ann['bbox'] for ann in annotations]  # [x, y, width, height]
         
         return annotations, labels, bboxes
+
+    def get_captions(self, image_filename: str) -> List[str]:
+        """Return list of captions for the given image filename if available."""
+        if not self.image_id_to_captions:
+            return []
+        image_id = self.filename_to_id.get(image_filename, None)
+        if image_id is None:
+            return []
+        return self.image_id_to_captions.get(image_id, [])
     
     def get_category_name(self, category_id: int) -> str:
         """Get category name from category ID"""
