@@ -9,6 +9,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
+from typing import cast
 
 class COCODataset(Dataset):
     """COCO 2014 Dataset for PyTorch DataLoader"""
@@ -24,7 +25,7 @@ class COCODataset(Dataset):
         
         Args:
             archive_path_file: Path to file containing archive root path
-            dataset: 'train', 'val', or 'test'
+            dataset: 'train', 'val'
             transform: Optional torchvision transforms
             load_annotations: Whether to load and return annotations
             image_size: Target image size (height, width)
@@ -310,8 +311,7 @@ if __name__ == "__main__":
         load_annotations=True
     )
     
-    print(f"Created dataloader with {len(val_loader)} batches")
-    print(f"Dataset size: {len(val_loader.dataset)} images")
+    print(f"Dataset size: {len(cast(COCODataset, val_loader.dataset))} images")
     
     # Test loading a batch
     try:
@@ -332,7 +332,8 @@ if __name__ == "__main__":
     
     # Show class distribution
     dataset = val_loader.dataset
-    if hasattr(dataset, 'get_class_distribution'):
+    # Cast to COCODataset to access get_class_distribution
+    if isinstance(dataset, COCODataset):
         class_dist = dataset.get_class_distribution()
         print(f"\nTop 10 most common classes:")
         for i, (class_name, count) in enumerate(list(class_dist.items())[:10]):

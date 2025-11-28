@@ -38,7 +38,7 @@ class ImageEncoder(nn.Module):
         self.feature_dim = self.backbone.fc.in_features
         
         # Remove the classification head
-        self.backbone.fc = nn.Identity()
+        self.backbone.fc = nn.Identity()  # type: ignore[assignment]
         
         # Projection head: 2048 -> hidden -> 512
         hidden_dim = 2048  # Common choice for intermediate layer
@@ -223,7 +223,7 @@ class InfoNCELoss(nn.Module):
         
         # Use learned logit_scale if provided, else use fixed temperature
         if logit_scale is None:
-            logit_scale = 1.0 / self.temperature
+            logit_scale = torch.tensor(1.0 / self.temperature, device=image_embeddings.device, dtype=image_embeddings.dtype)
         
         # Compute cosine similarity matrix: (B, B)
         # logits[i,j] = similarity between image i and text j

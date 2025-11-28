@@ -11,10 +11,13 @@ Simplified to core arguments:
 
 import argparse
 import datetime
+import os
 import random
 import time
 from pathlib import Path
 
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend to avoid tkinter warnings
 import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
@@ -66,6 +69,38 @@ def get_caption_from_labels(labels, dataset):
     return " ".join(filtered)
 
 
+def compute_recall_at_k(similarity_matrix, k_values=[1, 5, 10]):
+    """
+    Compute Recall@K for retrieval tasks.
+    
+    Args:
+        similarity_matrix: (N, M) matrix where entry [i,j] is similarity between query i and item j
+        k_values: List of K values to compute recall for
+    
+    Returns:
+        recalls: Dictionary with recall@k for each k
+    """
+    recalls = {}
+    n_queries = similarity_matrix.shape[0]
+    
+    # Get top-K predictions for each query
+    # Correct match is at index i (diagonal)
+    for k in k_values:
+        # Get indices of top-k most similar items
+        top_k_indices = similarity_matrix.topk(k, dim=1).indices
+        
+        # Check if correct index (i) is in top-k for each query i
+        correct_in_top_k = 0
+        for i in range(n_queries):
+            if i in top_k_indices[i]:
+                correct_in_top_k += 1
+        
+        recall = correct_in_top_k / n_queries
+        recalls[f'R@{k}'] = recall
+    
+    return recalls
+
+
 def clip_loss(image_embeds, text_embeds, logit_scale):
     """InfoNCE contrastive loss (symmetric)."""
     logits = logit_scale * (image_embeds @ text_embeds.T)
@@ -76,11 +111,15 @@ def clip_loss(image_embeds, text_embeds, logit_scale):
 
 
 @torch.no_grad()
-def validate(model, dataloader, device):
+def validate(model, dataloader, device, compute_retrieval_metrics=False):
     """Run validation pass."""
     model.eval()
     total_loss = 0.0
     batches = 0
+    
+    # For retrieval metrics
+    all_image_embeds = []
+    all_text_embeds = []
     
     base_dataset = dataloader.dataset.dataset if isinstance(dataloader.dataset, Subset) else dataloader.dataset
     
@@ -98,14 +137,57 @@ def validate(model, dataloader, device):
         loss = clip_loss(img_embeds, txt_embeds, logit_scale)
         total_loss += loss.item()
         batches += 1
+        
+        # Store embeddings for retrieval metrics
+        if compute_retrieval_metrics:
+            all_image_embeds.append(img_embeds.cpu())
+            all_text_embeds.append(txt_embeds.cpu())
     
-    return total_loss / max(1, batches)
+    avg_loss = total_loss / max(1, batches)
+    
+    # Compute retrieval metrics if requested
+    retrieval_metrics = {}
+    if compute_retrieval_metrics and len(all_image_embeds) > 0:
+        # Concatenate all embeddings
+        image_embeds = torch.cat(all_image_embeds, dim=0)
+        text_embeds = torch.cat(all_text_embeds, dim=0)
+        
+        # Compute cosine similarity matrix (embeddings already normalized)
+        similarity_matrix = image_embeds @ text_embeds.T
+        
+        # Image-to-Text retrieval: For each image, find matching text
+        i2t_recalls = compute_recall_at_k(similarity_matrix, k_values=[1, 5, 10])
+        
+        # Text-to-Image retrieval: For each text, find matching image
+        t2i_recalls = compute_recall_at_k(similarity_matrix.T, k_values=[1, 5, 10])
+        
+        retrieval_metrics = {
+            'i2t': i2t_recalls,
+            't2i': t2i_recalls,
+            'similarity_matrix': similarity_matrix
+        }
+    
+    return avg_loss, retrieval_metrics
 
 
 def train(args):
     set_seed(int(time.time()))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
+
+    if args.debug_cuda and torch.cuda.is_available():
+        os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+        print("[Debug] CUDA_LAUNCH_BLOCKING=1 enabled")
+
+    if args.deterministic and torch.cuda.is_available():
+        # Ensure cuBLAS reproducibility on CUDA >= 10.2
+        if 'CUBLAS_WORKSPACE_CONFIG' not in os.environ:
+            os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+            print('[Debug] Set CUBLAS_WORKSPACE_CONFIG=:4096:8 for deterministic cuBLAS')
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+        torch.use_deterministic_algorithms(True, warn_only=True)
+        print("[Debug] Deterministic CUDA algorithms enabled")
     
     # Create datasets first (before DataLoader)
     train_transform = get_default_transforms(image_size=(224, 224))
@@ -141,18 +223,20 @@ def train(args):
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=4 if device.type == 'cuda' else 0,
-        pin_memory=torch.cuda.is_available(),
-        collate_fn=collate_fn
+        num_workers=2 if device.type == 'cuda' else 0,  # Reduced workers to save memory
+        pin_memory=True if torch.cuda.is_available() else False,
+        collate_fn=collate_fn,
+        persistent_workers=False  # Don't keep workers alive between epochs
     )
     
     val_loader = DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4 if device.type == 'cuda' else 0,
-        pin_memory=torch.cuda.is_available(),
-        collate_fn=collate_fn
+        num_workers=2 if device.type == 'cuda' else 0,  # Reduced workers to save memory
+        pin_memory=True if torch.cuda.is_available() else False,
+        collate_fn=collate_fn,
+        persistent_workers=False  # Don't keep workers alive between epochs
     )
     
     # Model
@@ -170,19 +254,36 @@ def train(args):
     best_val_loss = float('inf')
     patience = 5
     patience_counter = 0
+    start_epoch = 1
     start_time = time.time()
     inference_speed = 0.0
     
+    # Resume from checkpoint if specified
+    if args.resume:
+        print(f"Resuming from checkpoint: {args.resume}")
+        checkpoint = torch.load(args.resume, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        train_losses = checkpoint.get('train_losses', [])
+        val_losses = checkpoint.get('val_losses', [])
+        best_val_loss = checkpoint.get('val_loss', float('inf'))
+        print(f"Resumed from epoch {checkpoint['epoch']}, best val loss: {best_val_loss:.4f}\n")
+    
     base_dataset = train_loader.dataset.dataset if isinstance(train_loader.dataset, Subset) else train_loader.dataset
     
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, args.epochs + 1):
         epoch_start = time.time()
         model.train()
         epoch_loss = 0.0
         batches = 0
         
+        # Clear cache at start of epoch (optional mid-batch clearing removed for stability)
+        if torch.cuda.is_available() and not args.no_epoch_cache_clear:
+            torch.cuda.empty_cache()
+        
         for batch in train_loader:
-            images = batch['images'].to(device)
+            images = batch['images'].to(device, non_blocking=True)
             
             # Build text tokens from category labels
             text_tokens = []
@@ -191,33 +292,46 @@ def train(args):
                 text_tokens.append(simple_tokenize(caption))
             text_tokens = torch.stack(text_tokens).to(device)
             
-            # Forward
-            img_embeds, txt_embeds, logit_scale = model(images, text_tokens)
-            loss = clip_loss(img_embeds, txt_embeds, logit_scale)
-            
-            # Backward
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(params, 1.0)
-            optimizer.step()
+            try:
+                # Forward
+                img_embeds, txt_embeds, logit_scale = model(images, text_tokens)
+                loss = clip_loss(img_embeds, txt_embeds, logit_scale)
+
+                # Backward
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(params, 1.0)
+                optimizer.step()
+            except RuntimeError as e:
+                if 'illegal memory access' in str(e).lower():
+                    print("\n[Error] CUDA illegal memory access detected. Aborting current run gracefully.")
+                    print("Suggestion: \n - Restart Python process to fully reset GPU state\n - Resume from latest checkpoint with --resume\n - Optionally reduce --batch-size or enable --deterministic\n - Run with --debug-cuda for precise backtrace")
+                    raise
+                else:
+                    raise
             
             epoch_loss += loss.item()
             batches += 1
+            
+            # (Removed periodic empty_cache to avoid potential driver instability)
         
         avg_train = epoch_loss / batches
         train_losses.append(avg_train)
         
-        # Validation
+        # Validation (compute retrieval metrics every epoch)
         val_start = time.time()
-        avg_val = validate(model, val_loader, device)
+        if torch.cuda.is_available() and not args.no_epoch_cache_clear:
+            torch.cuda.empty_cache()  # Clear cache before validation if not disabled
+        avg_val, retrieval_metrics = validate(model, val_loader, device, compute_retrieval_metrics=True)
         val_losses.append(avg_val)
         val_time = time.time() - val_start
         
-        # Timing calculations
+        # Timing calculations (handle resume correctly)
         epoch_time = time.time() - epoch_start
         elapsed_time = time.time() - start_time
-        avg_epoch_time = elapsed_time / epoch
-        remaining_epochs = args.epochs - epoch
+        epochs_completed_since_resume = max(1, (epoch - start_epoch + 1))
+        avg_epoch_time = elapsed_time / epochs_completed_since_resume
+        remaining_epochs = max(0, args.epochs - epoch)
         eta_seconds = avg_epoch_time * remaining_epochs
         eta_minutes = eta_seconds / 60
         eta_hours = eta_minutes / 60
@@ -231,6 +345,13 @@ def train(args):
         finish_str = finish_time.strftime("%H:%M:%S")
         
         print(f"Epoch {epoch:02d}/{args.epochs} | Train Loss: {avg_train:.4f} | Val Loss: {avg_val:.4f}")
+        
+        # Print retrieval metrics
+        if retrieval_metrics:
+            i2t = retrieval_metrics['i2t']
+            t2i = retrieval_metrics['t2i']
+            print(f"  Image→Text: R@1={i2t['R@1']*100:.1f}% R@5={i2t['R@5']*100:.1f}% R@10={i2t['R@10']*100:.1f}%")
+            print(f"  Text→Image: R@1={t2i['R@1']*100:.1f}% R@5={t2i['R@5']*100:.1f}% R@10={t2i['R@10']*100:.1f}%")
         
         # Format time as hh:mm:ss
         epoch_hours = int(epoch_time // 3600)
@@ -320,6 +441,11 @@ def parse_args():
                         help="Use only N validation samples (0 = all). For faster validation during tuning.")
     parser.add_argument("--save-plot", type=str, default="loss_curves.png", 
                         help="Filename for loss curve plot")
+    parser.add_argument("--resume", type=str, default="", 
+                        help="Path to checkpoint to resume from (e.g., outputs/best_clip.pth)")
+    parser.add_argument("--debug-cuda", action="store_true", help="Enable CUDA_LAUNCH_BLOCKING for debugging")
+    parser.add_argument("--deterministic", action="store_true", help="Enable deterministic CUDA kernels")
+    parser.add_argument("--no-epoch-cache-clear", action="store_true", help="Disable emptying CUDA cache each epoch")
     return parser.parse_args()
 
 

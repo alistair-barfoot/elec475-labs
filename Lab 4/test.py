@@ -10,17 +10,19 @@ Evaluates trained CLIP model on validation set with:
 
 import argparse
 import os
-import torch
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
+import torch
+import torch.nn.functional as F
 from PIL import Image
+from torch.utils.data import DataLoader, Subset
+from torchvision import transforms as T
 
+from dataloader import COCODataset, collate_fn, get_default_transforms
 from model import CLIPModel
-from dataloader import COCODataset, get_default_transforms, collate_fn
-from train import simple_tokenize, get_caption_from_labels
+from train import get_caption_from_labels, simple_tokenize
 
 
 def compute_recall_at_k(similarity_matrix, k_values=[1, 5, 10]):
@@ -212,7 +214,6 @@ def zero_shot_classification(image_path, class_labels, model, device):
     model.eval()
     
     # Load and preprocess image
-    from torchvision import transforms as T
     transform = get_default_transforms(image_size=(224, 224))
     image = Image.open(image_path).convert('RGB')
     image_tensor = transform(image)
