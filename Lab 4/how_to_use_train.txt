@@ -1,0 +1,14 @@
+# Baseline (no regularization) - for comparison
+py train.py --lr 5e-5 --epochs 20 --batch-size 16
+
+# With BatchNorm only
+py train.py --lr 5e-5 --epochs 20 --batch-size 16 --use-batchnorm
+
+# With Dropout only
+py train.py --lr 5e-5 --epochs 20 --batch-size 16 --use-dropout
+
+# With BOTH (RECOMMENDED for best results)
+py train.py --lr 5e-5 --epochs 20 --batch-size 16 --use-batchnorm --use-dropout
+
+# Custom dropout rate
+py train.py --lr 5e-5 --epochs 20 --batch-size 16 --use-batchnorm --use-dropout --dropout-rate 0.2

@@ -20,13 +20,19 @@ class ImageEncoder(nn.Module):
     """
     ResNet50-based image encoder with projection head for CLIP embedding space.
     """
-    def __init__(self, embedding_dim=512, pretrained=True):
+    def __init__(self, embedding_dim=512, pretrained=True, use_batchnorm=False, use_dropout=False, dropout_rate=0.1):
         """
         Args:
             embedding_dim: Dimension of CLIP embedding space (default 512)
             pretrained: Whether to use ImageNet pretrained weights
+            use_batchnorm: Whether to add BatchNorm to projection head (default False)
+            use_dropout: Whether to add Dropout to projection head (default False)
+            dropout_rate: Dropout probability if use_dropout=True (default 0.1)
         """
         super().__init__()
+        
+        self.use_batchnorm = use_batchnorm
+        self.use_dropout = use_dropout
         
         # Load pretrained ResNet50
         if pretrained:
@@ -42,12 +48,22 @@ class ImageEncoder(nn.Module):
         self.backbone.fc = nn.Identity()  # type: ignore[assignment]
         
         # Projection head: 2048 -> hidden -> 512
+        # Build projection head with optional BatchNorm and Dropout
         hidden_dim = 2048  # Common choice for intermediate layer
-        self.projection = nn.Sequential(
-            nn.Linear(self.feature_dim, hidden_dim),
-            nn.GELU(),
-            nn.Linear(hidden_dim, embedding_dim)
-        )
+        projection_layers = []
+        
+        # First layer: Linear + optional BatchNorm + GELU + optional Dropout
+        projection_layers.append(nn.Linear(self.feature_dim, hidden_dim))
+        if use_batchnorm:
+            projection_layers.append(nn.BatchNorm1d(hidden_dim))
+        projection_layers.append(nn.GELU())
+        if use_dropout:
+            projection_layers.append(nn.Dropout(dropout_rate))
+        
+        # Second layer: Linear to embedding dimension
+        projection_layers.append(nn.Linear(hidden_dim, embedding_dim))
+        
+        self.projection = nn.Sequential(*projection_layers)
         
         # Keep backbone trainable by default
         # (User can freeze layers if desired via freeze_backbone())
@@ -151,17 +167,26 @@ class CLIPModel(nn.Module):
     """
     CLIP-style multimodal model combining image and text encoders.
     """
-    def __init__(self, embedding_dim=512, temperature=0.07, pretrained_image=True):
+    def __init__(self, embedding_dim=512, temperature=0.07, pretrained_image=True, 
+                 use_batchnorm=False, use_dropout=False, dropout_rate=0.1):
         """
         Args:
             embedding_dim: Shared embedding space dimension
             temperature: Temperature parameter for contrastive loss
             pretrained_image: Use ImageNet pretrained weights for image encoder
+            use_batchnorm: Whether to add BatchNorm to projection head (default False)
+            use_dropout: Whether to add Dropout to projection head (default False)
+            dropout_rate: Dropout probability if use_dropout=True (default 0.1)
         """
         super().__init__()
         
-        self.image_encoder = ImageEncoder(embedding_dim=embedding_dim, 
-                                          pretrained=pretrained_image)
+        self.image_encoder = ImageEncoder(
+            embedding_dim=embedding_dim, 
+            pretrained=pretrained_image,
+            use_batchnorm=use_batchnorm,
+            use_dropout=use_dropout,
+            dropout_rate=dropout_rate
+        )
         self.text_encoder = TextEncoder(embedding_dim=embedding_dim)
         
         # Learnable temperature parameter

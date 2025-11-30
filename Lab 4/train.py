@@ -277,7 +277,13 @@ def train(args):
     )
     
     # Model
-    model = CLIPModel(embedding_dim=512, pretrained_image=True).to(device)
+    model = CLIPModel(
+        embedding_dim=512, 
+        pretrained_image=True,
+        use_batchnorm=args.use_batchnorm,
+        use_dropout=args.use_dropout,
+        dropout_rate=args.dropout_rate
+    ).to(device)
     # Text encoder training flag removed; using model defaults
     
     # Optimizer
@@ -289,7 +295,12 @@ def train(args):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     
     print(f"\nTrainable parameters: {sum(p.numel() for p in params):,}")
-    print(f"Config: lr={args.lr} epochs={args.epochs} batch_size={args.batch_size}\n")
+    print(f"Config: lr={args.lr} epochs={args.epochs} batch_size={args.batch_size}")
+    print(f"Regularization: BatchNorm={args.use_batchnorm} Dropout={args.use_dropout}", end="")
+    if args.use_dropout:
+        print(f" (rate={args.dropout_rate})")
+    else:
+        print()
     
     train_losses = []
     val_losses = []
@@ -541,6 +552,15 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
     parser.add_argument("--epochs", type=int, default=5, help="Number of epochs")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
+    
+    # Regularization options
+    parser.add_argument("--use-batchnorm", action="store_true", 
+                        help="Add BatchNorm to projection head for regularization")
+    parser.add_argument("--use-dropout", action="store_true", 
+                        help="Add Dropout to projection head for regularization")
+    parser.add_argument("--dropout-rate", type=float, default=0.1, 
+                        help="Dropout rate if using dropout (default 0.1)")
+    
     # Removed subset CLI options
     parser.add_argument("--save-plot", type=str, default="loss_curves.png", 
                         help="Filename for loss curve plot")
