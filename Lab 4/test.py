@@ -669,7 +669,7 @@ def parse_args():
                         help="Batch size for evaluation")
     parser.add_argument("--eval-subset", type=int, default=0,
                         help="Use only N validation samples (0 = all)")
-    parser.add_argument("--max-eval-samples", type=int, default=1000,
+    parser.add_argument("--max-eval-samples", type=int, default=40000,
                         help="Maximum samples for retrieval evaluation")
     
     # Text-to-image retrieval
