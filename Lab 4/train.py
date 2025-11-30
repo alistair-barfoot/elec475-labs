@@ -5,13 +5,11 @@ Simplified to core arguments:
 - --lr: learning rate
 - --epochs: number of training epochs
 - --batch-size: batch size for training
-- --train-subset: limit training to N samples (0 = use all)
 - --save-plot: save loss curve plot (default: loss_curves.png)
 """
 
 import argparse
 import datetime
-import os
 import random
 import time
 from pathlib import Path
@@ -19,11 +17,12 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend to avoid tkinter warnings
 import matplotlib.pyplot as plt
+import clip  # Use official CLIP tokenizer to avoid invalid token indices
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 
-from dataloader import COCODataset, collate_fn, create_dataloader, get_default_transforms
+from dataloader import COCODataset, collate_fn, get_default_transforms
 from model import CLIPModel
 
 
@@ -33,25 +32,54 @@ def set_seed(seed: int = 42):
     torch.cuda.manual_seed_all(seed)
 
 
-def build_subset(dataset, subset_size: int, seed: int):
-    """Create a random subset of the dataset for quick tuning."""
-    if subset_size <= 0 or subset_size >= len(dataset):
-        return dataset
-    rng = random.Random(seed)
-    indices = list(range(len(dataset)))
-    rng.shuffle(indices)
-    return Subset(dataset, indices[:subset_size])
+# -------------------------
+# Text Embedding Cache Util
+# -------------------------
+def build_text_cache(model: CLIPModel, dataset: COCODataset, device: torch.device, cache_path: Path):
+    """Precompute text embeddings for all images in a dataset.
+
+    Returns a dict mapping filename -> embedding (CPU tensor). Saves to cache_path.
+    """
+    cache_path.parent.mkdir(exist_ok=True)
+    model.eval()
+    text_map = {}
+    with torch.no_grad():
+        for fname in dataset.image_files:
+            # Prefer captions; fallback to labels-derived caption
+            caption_list = []
+            get_captions_fn = getattr(dataset, 'get_captions', None)
+            if callable(get_captions_fn):
+                try:
+                    caption_list = get_captions_fn(fname)
+                except Exception:
+                    caption_list = []
+            if isinstance(caption_list, list) and len(caption_list) > 0:
+                caption = caption_list[0]
+            else:
+                _, labels, _ = dataset._get_image_annotations(fname)
+                caption = get_caption_from_labels(labels, dataset)
+            tokens = simple_tokenize(caption).unsqueeze(0).to(device)
+            # Dummy image placeholder; only text path matters
+            _, txt_emb, _ = model(torch.zeros(1,3,224,224, device=device), tokens)
+            text_map[fname] = txt_emb.squeeze(0).cpu()
+    try:
+        torch.save(text_map, cache_path)
+    except Exception:
+        pass
+    return text_map
 
 
-def simple_tokenize(caption: str, max_length: int = 77, vocab_size: int = 49408):
-    """Simple hash-based tokenizer (placeholder - use proper tokenizer in production)."""
-    words = caption.strip().lower().split()
-    tokens = []
-    for w in words[:max_length]:
-        bucket = (hash(w) % (vocab_size - 2)) + 2
-        tokens.append(bucket)
-    tokens += [0] * (max_length - len(tokens))  # pad
-    return torch.tensor(tokens, dtype=torch.long)
+# Subset functionality removed
+
+
+def simple_tokenize(caption: str) -> torch.Tensor:
+    """Tokenize using official CLIP BPE to ensure valid indices and EOS token.
+
+    Returns:
+        Tensor shape (77,) of token ids suitable for CLIP text encoder.
+    """
+    # clip.tokenize returns shape (1,77); squeeze to (77,)
+    return clip.tokenize(caption, truncate=True)[0]
 
 
 def get_caption_from_labels(labels, dataset):
@@ -72,32 +100,38 @@ def get_caption_from_labels(labels, dataset):
 def compute_recall_at_k(similarity_matrix, k_values=[1, 5, 10]):
     """
     Compute Recall@K for retrieval tasks.
-    
+
+    Assumes that the i-th query corresponds to the i-th ground-truth target
+    (i.e., correct matches lie on the diagonal when queries and targets are
+    concatenated in the same order).
+
     Args:
-        similarity_matrix: (N, M) matrix where entry [i,j] is similarity between query i and item j
+        similarity_matrix: (N, M) tensor where entry [i,j] is similarity between query i and item j
         k_values: List of K values to compute recall for
-    
+
     Returns:
-        recalls: Dictionary with recall@k for each k
+        recalls: Dictionary mapping 'R@k' -> recall float in [0,1]
     """
     recalls = {}
-    n_queries = similarity_matrix.shape[0]
-    
-    # Get top-K predictions for each query
-    # Correct match is at index i (diagonal)
+    n_queries = similarity_matrix.size(0)
+
+    # Ensure on CPU for reliable indexing ops
+    sim = similarity_matrix.detach()
+    if sim.is_cuda:
+        sim = sim.cpu()
+
+    # Ground-truth indices for each query (0..N-1)
+    gt = torch.arange(n_queries)
+
     for k in k_values:
-        # Get indices of top-k most similar items
-        top_k_indices = similarity_matrix.topk(k, dim=1).indices
-        
-        # Check if correct index (i) is in top-k for each query i
-        correct_in_top_k = 0
-        for i in range(n_queries):
-            if i in top_k_indices[i]:
-                correct_in_top_k += 1
-        
-        recall = correct_in_top_k / n_queries
-        recalls[f'R@{k}'] = recall
-    
+        # Top-k indices per query (shape: N x k)
+        top_k_indices = torch.topk(sim, k=k, dim=1, largest=True, sorted=True).indices
+        # Check whether ground-truth index appears in top-k for each query
+        # Vectorized: compare each row's top-k against its gt index
+        matches = (top_k_indices == gt.unsqueeze(1)).any(dim=1)
+        recall = matches.float().mean().item()
+        recalls[f"R@{k}"] = recall
+
     return recalls
 
 
@@ -121,10 +155,7 @@ def validate(model, dataloader, device, compute_retrieval_metrics=False):
     all_image_embeds = []
     all_text_embeds = []
     
-    if isinstance(dataloader.dataset, Subset):
-        base_dataset = dataloader.dataset.dataset
-    else:
-        base_dataset = dataloader.dataset
+    base_dataset = dataloader.dataset
     assert isinstance(base_dataset, COCODataset)
     
     for batch in dataloader:
@@ -149,6 +180,9 @@ def validate(model, dataloader, device, compute_retrieval_metrics=False):
             text_tokens.append(simple_tokenize(caption))
         text_tokens = torch.stack(text_tokens).to(device)
         
+        # Safety: ensure token indices are within vocab before forward
+        if text_tokens.max().item() >= model.text_encoder.vocab_size:
+            raise ValueError(f"Token index {text_tokens.max().item()} exceeds vocab size {model.text_encoder.vocab_size}")
         img_embeds, txt_embeds, logit_scale = model(images, text_tokens)
         loss = clip_loss(img_embeds, txt_embeds, logit_scale)
         total_loss += loss.item()
@@ -167,6 +201,10 @@ def validate(model, dataloader, device, compute_retrieval_metrics=False):
         # Concatenate all embeddings
         image_embeds = torch.cat(all_image_embeds, dim=0)
         text_embeds = torch.cat(all_text_embeds, dim=0)
+
+        # Ensure L2-normalized before cosine similarity (safety even if model normalizes)
+        image_embeds = F.normalize(image_embeds, p=2, dim=1)
+        text_embeds = F.normalize(text_embeds, p=2, dim=1)
         
         # Compute cosine similarity matrix (embeddings already normalized)
         similarity_matrix = image_embeds @ text_embeds.T
@@ -191,19 +229,7 @@ def train(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
 
-    if args.debug_cuda and torch.cuda.is_available():
-        os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-        print("[Debug] CUDA_LAUNCH_BLOCKING=1 enabled")
-
-    if args.deterministic and torch.cuda.is_available():
-        # Ensure cuBLAS reproducibility on CUDA >= 10.2
-        if 'CUBLAS_WORKSPACE_CONFIG' not in os.environ:
-            os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
-            print('[Debug] Set CUBLAS_WORKSPACE_CONFIG=:4096:8 for deterministic cuBLAS')
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.deterministic = True
-        torch.use_deterministic_algorithms(True, warn_only=True)
-        print("[Debug] Deterministic CUDA algorithms enabled")
+    # Removed debug/deterministic flags; running with default CUDA settings
     
     # Create datasets first (before DataLoader)
     train_transform = get_default_transforms(image_size=(224, 224))
@@ -224,14 +250,7 @@ def train(args):
         load_captions=True
     )
     
-    # Apply subset if specified
-    if args.train_subset > 0:
-        train_dataset = build_subset(train_dataset, args.train_subset, int(time.time()))
-        print(f"Training on subset: {len(train_dataset)} images")
-    
-    if args.val_subset > 0:
-        val_dataset = build_subset(val_dataset, args.val_subset, int(time.time()))
-        print(f"Validation on subset: {len(val_dataset)} images")
+    # Subset options removed; always use full dataset
     
     print(f"Train samples: {len(train_dataset)}")
     print(f"Val samples: {len(val_dataset)}")
@@ -259,17 +278,15 @@ def train(args):
     
     # Model
     model = CLIPModel(embedding_dim=512, pretrained_image=True).to(device)
-    if getattr(args, 'train_text', False):
-        if hasattr(model, "text_encoder") and hasattr(model.text_encoder, "parameters"):
-            for p in model.text_encoder.parameters():
-                p.requires_grad = True
-            print("[Config] Text encoder parameters set to requires_grad=True")
-        else:
-            print("[Warning] model has no text_encoder; --train-text ignored")
+    # Text encoder training flag removed; using model defaults
     
     # Optimizer
     params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.01)
+    # Use AdamW with recommended weight decay for CLIP-style models
+    optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-4)
+
+    # Scheduler 
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     
     print(f"\nTrainable parameters: {sum(p.numel() for p in params):,}")
     print(f"Config: lr={args.lr} epochs={args.epochs} batch_size={args.batch_size}\n")
@@ -295,46 +312,77 @@ def train(args):
         best_val_loss = checkpoint.get('val_loss', float('inf'))
         print(f"Resumed from epoch {checkpoint['epoch']}, best val loss: {best_val_loss:.4f}\n")
     
-    if isinstance(train_loader.dataset, Subset):
-        base_dataset = train_loader.dataset.dataset
-    else:
-        base_dataset = train_loader.dataset
+    base_dataset = train_loader.dataset
     assert isinstance(base_dataset, COCODataset)
     
+    # Optional: build text embedding cache for train/val
+    text_cache_train = None
+    text_cache_val = None
+    if args.text_cache:
+        text_cache_train = build_text_cache(model, train_dataset, device, cache_path=Path("outputs")/"train_text_cache.pt")
+        text_cache_val = build_text_cache(model, val_dataset, device, cache_path=Path("outputs")/"val_text_cache.pt")
+
     for epoch in range(start_epoch, args.epochs + 1):
         epoch_start = time.time()
         model.train()
         epoch_loss = 0.0
         batches = 0
         
-        # Clear cache at start of epoch (optional mid-batch clearing removed for stability)
-        if torch.cuda.is_available() and not args.no_epoch_cache_clear:
+        # Clear cache at start of epoch (kept simple without flag)
+        if torch.cuda.is_available():
             torch.cuda.empty_cache()
         
         for batch in train_loader:
             images = batch['images'].to(device, non_blocking=True)
             
-            # Build text tokens (prefer real captions; fallback to labels)
-            text_tokens = []
-            for i, labels in enumerate(batch['labels']):
-                caption_list = []
-                if 'filenames' in batch:
-                    fname = batch['filenames'][i]
-                    if hasattr(base_dataset, 'get_captions'):
-                        try:
-                            caption_list = base_dataset.get_captions(fname)
-                        except Exception:
-                            caption_list = []
-                if isinstance(caption_list, list) and len(caption_list) > 0:
-                    caption = caption_list[0]
-                else:
-                    caption = get_caption_from_labels(labels, base_dataset)
-                text_tokens.append(simple_tokenize(caption))
-            text_tokens = torch.stack(text_tokens).to(device)
+            # Build text inputs or use cached embeddings
+            use_cache = args.text_cache and (text_cache_train is not None)
+            text_embeds_batch = None
+            text_tokens = None
+            if use_cache:
+                emb_list = []
+                cache = text_cache_train or {}
+                for i, fname in enumerate(batch['filenames']):
+                    emb = cache.get(fname)
+                    if emb is None:
+                        # Fallback: on-the-fly
+                        labels = batch['labels'][i]
+                        caption = get_caption_from_labels(labels, base_dataset)
+                        tokens = simple_tokenize(caption)
+                        with torch.no_grad():
+                            _, txt_emb, _ = model.forward(torch.zeros(1,3,224,224, device=device), tokens.unsqueeze(0).to(device))
+                        emb = txt_emb.squeeze(0).cpu()
+                    emb_list.append(emb)
+                text_embeds_batch = torch.stack(emb_list).to(device) if len(emb_list) > 0 else torch.empty((0,512), device=device)
+            else:
+                text_tokens = []
+                for i, labels in enumerate(batch['labels']):
+                    caption_list = []
+                    if 'filenames' in batch:
+                        fname = batch['filenames'][i]
+                        get_captions_fn = getattr(base_dataset, 'get_captions', None)
+                        if callable(get_captions_fn):
+                            try:
+                                caption_list = get_captions_fn(fname)
+                            except Exception:
+                                caption_list = []
+                    if isinstance(caption_list, list) and len(caption_list) > 0:
+                        caption = caption_list[0]
+                    else:
+                        caption = get_caption_from_labels(labels, base_dataset)
+                    text_tokens.append(simple_tokenize(caption))
+                text_tokens = torch.stack(text_tokens).to(device) if len(text_tokens) > 0 else torch.empty((0,77), dtype=torch.long, device=device)
             
             try:
                 # Forward
-                img_embeds, txt_embeds, logit_scale = model(images, text_tokens)
+                if use_cache and text_embeds_batch is not None and text_embeds_batch.numel() > 0:
+                    img_embeds, txt_embeds, logit_scale = model.forward_with_text_embeddings(images, text_embeds_batch)
+                else:
+                    if text_tokens is None or text_tokens.numel() == 0:
+                        raise ValueError("Empty text_tokens in batch")
+                    if text_tokens.max().item() >= model.text_encoder.vocab_size:
+                        raise ValueError(f"Token index {text_tokens.max().item()} exceeds vocab size {model.text_encoder.vocab_size}")
+                    img_embeds, txt_embeds, logit_scale = model(images, text_tokens)
                 loss = clip_loss(img_embeds, txt_embeds, logit_scale)
 
                 # Backward
@@ -345,7 +393,7 @@ def train(args):
             except RuntimeError as e:
                 if 'illegal memory access' in str(e).lower():
                     print("\n[Error] CUDA illegal memory access detected. Aborting current run gracefully.")
-                    print("Suggestion: \n - Restart Python process to fully reset GPU state\n - Resume from latest checkpoint with --resume\n - Optionally reduce --batch-size or enable --deterministic\n - Run with --debug-cuda for precise backtrace")
+                    print("Suggestion: \n - Restart Python process to fully reset GPU state\n - Resume from latest checkpoint with --resume\n - Reduce --batch-size\n - Ensure drivers/toolkit match your PyTorch build")
                     raise
                 else:
                     raise
@@ -360,8 +408,8 @@ def train(args):
         
         # Validation (compute retrieval metrics every epoch)
         val_start = time.time()
-        if torch.cuda.is_available() and not args.no_epoch_cache_clear:
-            torch.cuda.empty_cache()  # Clear cache before validation if not disabled
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()  # Clear cache before validation
         avg_val, retrieval_metrics = validate(model, val_loader, device, compute_retrieval_metrics=True)
         val_losses.append(avg_val)
         val_time = time.time() - val_start
@@ -392,6 +440,22 @@ def train(args):
             t2i = retrieval_metrics['t2i']
             print(f"  Image→Text: R@1={i2t['R@1']*100:.1f}% R@5={i2t['R@5']*100:.1f}% R@10={i2t['R@10']*100:.1f}%")
             print(f"  Text→Image: R@1={t2i['R@1']*100:.1f}% R@5={t2i['R@5']*100:.1f}% R@10={t2i['R@10']*100:.1f}%")
+
+            # Optionally save the full cosine similarity matrix (can be large)
+            if getattr(args, 'save_similarity', False) and 'similarity_matrix' in retrieval_metrics:
+                Path("outputs").mkdir(exist_ok=True)
+                sim_path = Path("outputs") / f"similarity_epoch_{epoch:02d}.pt"
+                sim_tensor = retrieval_metrics['similarity_matrix']
+                try:
+                    torch.save({
+                        'similarity_matrix': sim_tensor,
+                        'num_images': sim_tensor.shape[0],
+                        'num_texts': sim_tensor.shape[1],
+                        'epoch': epoch
+                    }, sim_path)
+                    print(f"  Saved similarity matrix to: {sim_path}")
+                except Exception as e:
+                    print(f"  [Warn] Failed to save similarity matrix: {e}")
         
         # Format time as hh:mm:ss
         epoch_hours = int(epoch_time // 3600)
@@ -407,6 +471,8 @@ def train(args):
         eta_seconds_int = int(eta_seconds % 60)
         
         print(f"  Time: {epoch_hours:02d}:{epoch_minutes:02d}:{epoch_seconds:02d} | Elapsed: {elapsed_hours:02d}:{elapsed_minutes:02d}:{elapsed_seconds:02d} | ETA: {eta_hours_int:02d}:{eta_minutes_int:02d}:{eta_seconds_int:02d} (finish ~{finish_str}) | Inference: {inference_speed:.1f} ms")
+
+        scheduler.step()
 
         # Save model checkpoint if validation improves
         if avg_val < best_val_loss:
@@ -472,22 +538,17 @@ def train(args):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train CLIP model with InfoNCE loss")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
     parser.add_argument("--epochs", type=int, default=5, help="Number of epochs")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
-    parser.add_argument("--train-subset", type=int, default=0, 
-                        help="Use only N training samples (0 = all). For tuning hyperparams on small subset.")
-    parser.add_argument("--val-subset", type=int, default=0, 
-                        help="Use only N validation samples (0 = all). For faster validation during tuning.")
+    # Removed subset CLI options
     parser.add_argument("--save-plot", type=str, default="loss_curves.png", 
                         help="Filename for loss curve plot")
     parser.add_argument("--resume", type=str, default="", 
                         help="Path to checkpoint to resume from (e.g., outputs/best_clip.pth)")
-    parser.add_argument("--train-text", action="store_true", 
-                        help="Unfreeze and train the text encoder as well")
-    parser.add_argument("--debug-cuda", action="store_true", help="Enable CUDA_LAUNCH_BLOCKING for debugging")
-    parser.add_argument("--deterministic", action="store_true", help="Enable deterministic CUDA kernels")
-    parser.add_argument("--no-epoch-cache-clear", action="store_true", help="Disable emptying CUDA cache each epoch")
+    # Removed --train-text, --debug-cuda, --deterministic, --no-epoch-cache-clear
+    parser.add_argument("--save-similarity", action="store_true", help="Save full cosine similarity matrix each epoch (may be large)")
+    parser.add_argument("--text-cache", action="store_true", help="Precompute and use cached text embeddings for train/val")
     return parser.parse_args()
 
 

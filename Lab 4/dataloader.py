@@ -120,10 +120,13 @@ class COCODataset(Dataset):
 
     def _load_captions(self):
         """Load COCO caption annotations if available."""
+        # Note: This dataset uses category labels instead of captions
+        # Captions will be generated from category labels in the training code
         captions_path = os.path.join(self.coco_root, "annotations", 
                                      f"captions_{self.dataset}2014.json")
+        
         if not os.path.exists(captions_path):
-            print(f"Warning: Captions file {captions_path} does not exist")
+            # No separate caption file - will use category labels instead
             return
 
         try:
@@ -139,12 +142,9 @@ class COCODataset(Dataset):
                     continue
                 self.image_id_to_captions.setdefault(image_id, []).append(caption)
 
-            # Filter image_files to those having captions as well (if both present)
-            # Keep current image_files but it's fine if some have only instances
-            captions_count = sum(1 for img in self.image_files
-                                 if img in self.filename_to_id and 
-                                 self.filename_to_id[img] in self.image_id_to_captions)
-            print(f"Loaded captions for {captions_count} images")
+            images_with_captions = len(self.image_id_to_captions)
+            if images_with_captions > 0:
+                print(f"Loaded captions for {images_with_captions} images")
         except Exception as e:
             print(f"Error loading captions: {e}")
             self.captions_data = None

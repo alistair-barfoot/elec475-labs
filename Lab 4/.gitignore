@@ -2,3 +2,5 @@ path_to_archive.txt
 *.png
 *.jpg
 *.pth
+*.pt
+__pycache__/

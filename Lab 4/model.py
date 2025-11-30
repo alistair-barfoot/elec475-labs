@@ -182,6 +182,21 @@ class CLIPModel(nn.Module):
         text_embeddings = self.text_encoder(text_tokens)
         
         return image_embeddings, text_embeddings, self.logit_scale.exp()
+
+    def forward_with_text_embeddings(self, images, text_embeddings):
+        """Fast path when text embeddings are precomputed and provided.
+
+        Args:
+            images: (B, 3, H, W) image tensor
+            text_embeddings: (B, embedding_dim) precomputed, preferably normalized
+
+        Returns:
+            image_embeddings, text_embeddings, logit_scale
+        """
+        image_embeddings = self.image_encoder(images)
+        # Ensure text embeddings are normalized
+        text_embeddings = nn.functional.normalize(text_embeddings, p=2, dim=1)
+        return image_embeddings, text_embeddings, self.logit_scale.exp()
     
     def get_trainable_params(self):
         """Return only trainable parameters (image encoder + projection)."""
