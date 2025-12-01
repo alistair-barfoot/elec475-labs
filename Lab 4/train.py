@@ -232,7 +232,7 @@ def train(args):
     # Removed debug/deterministic flags; running with default CUDA settings
     
     # Create datasets first (before DataLoader)
-    train_transform = get_default_transforms(image_size=(224, 224))
+    train_transform = get_default_transforms(image_size=(224, 224), use_augmentation=args.use_augmentation)
     train_dataset = COCODataset(
         dataset='train',
         transform=train_transform,
@@ -260,20 +260,26 @@ def train(args):
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=2 if device.type == 'cuda' else 0,  # Reduced workers to save memory
-        pin_memory=True if torch.cuda.is_available() else False,
+        num_workers=0,
+        pin_memory=False,
+        # num_workers=2 if device.type == 'cuda' else 0,  # Reduced workers to save memory
+        # pin_memory=True if torch.cuda.is_available() else False,
         collate_fn=collate_fn,
-        persistent_workers=False  # Don't keep workers alive between epochs
+        persistent_workers=False,  # Don't keep workers alive between epochs
+        drop_last=True  # Drop last incomplete batch for training
     )
     
     val_loader = DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=2 if device.type == 'cuda' else 0,  # Reduced workers to save memory
-        pin_memory=True if torch.cuda.is_available() else False,
+        # num_workers=2 if device.type == 'cuda' else 0,  # Reduced workers to save memory
+        # pin_memory=True if torch.cuda.is_available() else False,
+        num_workers=0,
+        pin_memory=False,
         collate_fn=collate_fn,
-        persistent_workers=False  # Don't keep workers alive between epochs
+        persistent_workers=False,  # Don't keep workers alive between epochs
+        drop_last=True
     )
     
     # Model
@@ -289,13 +295,14 @@ def train(args):
     # Optimizer
     params = [p for p in model.parameters() if p.requires_grad]
     # Use AdamW with recommended weight decay for CLIP-style models
-    optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-4)
+    optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-3)
 
     # Scheduler 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     
     print(f"\nTrainable parameters: {sum(p.numel() for p in params):,}")
     print(f"Config: lr={args.lr} epochs={args.epochs} batch_size={args.batch_size}")
+    print(f"Data Augmentation: {args.use_augmentation}")
     print(f"Regularization: BatchNorm={args.use_batchnorm} Dropout={args.use_dropout}", end="")
     if args.use_dropout:
         print(f" (rate={args.dropout_rate})")
@@ -326,12 +333,23 @@ def train(args):
     base_dataset = train_loader.dataset
     assert isinstance(base_dataset, COCODataset)
     
-    # Optional: build text embedding cache for train/val
+    # Optional: build text embedding cache (train only)
     text_cache_train = None
-    text_cache_val = None
     if args.text_cache:
-        text_cache_train = build_text_cache(model, train_dataset, device, cache_path=Path("outputs")/"train_text_cache.pt")
-        text_cache_val = build_text_cache(model, val_dataset, device, cache_path=Path("outputs")/"val_text_cache.pt")
+        outputs_dir = Path("cache")
+        outputs_dir.mkdir(exist_ok=True)
+        train_cache_path = outputs_dir / "train_text_cache.pt"
+        try:
+            if train_cache_path.exists():
+                text_cache_train = torch.load(train_cache_path, map_location="cpu")
+                print(f"Loaded train text cache from: {train_cache_path}")
+            else:
+                text_cache_train = build_text_cache(model, train_dataset, device, cache_path=train_cache_path)
+                print(f"Built train text cache at: {train_cache_path}")
+        except Exception as e:
+            print(f"[Warn] Failed to load/build train text cache: {e}")
+            text_cache_train = None
+        start_time = time.time()  # Reset after cache build
 
     for epoch in range(start_epoch, args.epochs + 1):
         epoch_start = time.time()
@@ -560,6 +578,10 @@ def parse_args():
                         help="Add Dropout to projection head for regularization")
     parser.add_argument("--dropout-rate", type=float, default=0.1, 
                         help="Dropout rate if using dropout (default 0.1)")
+    
+    # Data augmentation
+    parser.add_argument("--use-augmentation", action="store_true", 
+                        help="Apply data augmentation (color jitter and gaussian blur) during training")
     
     # Removed subset CLI options
     parser.add_argument("--save-plot", type=str, default="loss_curves.png", 

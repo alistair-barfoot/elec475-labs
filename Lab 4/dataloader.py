@@ -251,13 +251,27 @@ class COCODataset(Dataset):
         
         return dict(sorted(class_counts.items(), key=lambda x: x[1], reverse=True))
 
-def get_default_transforms(image_size: Tuple[int, int] = (224, 224)) -> transforms.Compose:
-    """Get default image transforms for COCO dataset"""
-    transform_list = [
-        transforms.Resize(image_size),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711])
-    ]
+def get_default_transforms(image_size: Tuple[int, int] = (224, 224), use_augmentation: bool = False) -> transforms.Compose:
+    """Get default image transforms for COCO dataset
+    
+    Args:
+        image_size: Target image size (height, width)
+        use_augmentation: Whether to apply data augmentation (color jitter and gaussian blur)
+    """
+    if use_augmentation:
+        transform_list = [
+            transforms.Resize(image_size),
+            transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
+            transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711])
+        ]
+    else:
+        transform_list = [
+            transforms.Resize(image_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711])
+        ]   
     
     return transforms.Compose(transform_list)
 
@@ -279,7 +293,8 @@ def create_dataloader(dataset: str = 'val',
                      num_workers: int = 0,
                      image_size: Tuple[int, int] = (224, 224),
                      load_annotations: bool = True,
-                     use_augmentation: bool = False) -> DataLoader:
+                     use_augmentation: bool = False,
+                     drop_last: bool = False) -> DataLoader:
     """
     Create a PyTorch DataLoader for COCO dataset
     
@@ -291,6 +306,7 @@ def create_dataloader(dataset: str = 'val',
         image_size: Target image size (height, width)
         load_annotations: Whether to load annotations
         use_augmentation: Whether to apply data augmentation
+        drop_last: Whether to drop the last incomplete batch
         
     Returns:
         PyTorch DataLoader
@@ -317,7 +333,8 @@ def create_dataloader(dataset: str = 'val',
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
-        collate_fn=collate_fn if load_annotations else None
+        collate_fn=collate_fn if load_annotations else None,
+        drop_last=drop_last
     )
     
     return dataloader
