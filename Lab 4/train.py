@@ -229,7 +229,12 @@ def train(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
 
-    # Removed debug/deterministic flags; running with default CUDA settings
+    # Add memory debugging and stability settings
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.backends.cudnn.benchmark = False  # Disable for stability
+        torch.backends.cudnn.deterministic = True
+        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory // 1024**3} GB")
     
     # Create datasets first (before DataLoader)
     train_transform = get_default_transforms(image_size=(224, 224), use_augmentation=args.use_augmentation)
@@ -255,15 +260,13 @@ def train(args):
     print(f"Train samples: {len(train_dataset)}")
     print(f"Val samples: {len(val_dataset)}")
     
-    # Create DataLoaders with (possibly subsetted) datasets
+    # Create DataLoaders with memory-stable settings
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=0,
-        pin_memory=False,
-        # num_workers=2 if device.type == 'cuda' else 0,  # Reduced workers to save memory
-        # pin_memory=True if torch.cuda.is_available() else False,
+        num_workers=2,  # Reduced from 4
+        pin_memory=False,  # Disable to reduce memory pressure
         collate_fn=collate_fn,
         persistent_workers=False,  # Don't keep workers alive between epochs
         drop_last=True  # Drop last incomplete batch for training
@@ -273,13 +276,11 @@ def train(args):
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        # num_workers=2 if device.type == 'cuda' else 0,  # Reduced workers to save memory
-        # pin_memory=True if torch.cuda.is_available() else False,
-        num_workers=0,
-        pin_memory=False,
+        num_workers=2,  # Reduced from 4
+        pin_memory=False,  # Disable to reduce memory pressure
         collate_fn=collate_fn,
         persistent_workers=False,  # Don't keep workers alive between epochs
-        drop_last=True
+        drop_last=False  # Keep all validation data
     )
     
     # Model
@@ -357,80 +358,96 @@ def train(args):
         epoch_loss = 0.0
         batches = 0
         
-        # Clear cache at start of epoch (kept simple without flag)
+        # Aggressive memory management
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()  # Ensure all operations complete
         
-        for batch in train_loader:
-            images = batch['images'].to(device, non_blocking=True)
-            
-            # Build text inputs or use cached embeddings
-            use_cache = args.text_cache and (text_cache_train is not None)
-            text_embeds_batch = None
-            text_tokens = None
-            if use_cache:
-                emb_list = []
-                cache = text_cache_train or {}
-                for i, fname in enumerate(batch['filenames']):
-                    emb = cache.get(fname)
-                    if emb is None:
-                        # Fallback: on-the-fly
-                        labels = batch['labels'][i]
-                        caption = get_caption_from_labels(labels, base_dataset)
-                        tokens = simple_tokenize(caption)
-                        with torch.no_grad():
-                            _, txt_emb, _ = model.forward(torch.zeros(1,3,224,224, device=device), tokens.unsqueeze(0).to(device))
-                        emb = txt_emb.squeeze(0).cpu()
-                    emb_list.append(emb)
-                text_embeds_batch = torch.stack(emb_list).to(device) if len(emb_list) > 0 else torch.empty((0,512), device=device)
-            else:
-                text_tokens = []
-                for i, labels in enumerate(batch['labels']):
-                    caption_list = []
-                    if 'filenames' in batch:
-                        fname = batch['filenames'][i]
-                        get_captions_fn = getattr(base_dataset, 'get_captions', None)
-                        if callable(get_captions_fn):
-                            try:
-                                caption_list = get_captions_fn(fname)
-                            except Exception:
-                                caption_list = []
-                    if isinstance(caption_list, list) and len(caption_list) > 0:
-                        caption = caption_list[0]
-                    else:
-                        caption = get_caption_from_labels(labels, base_dataset)
-                    text_tokens.append(simple_tokenize(caption))
-                text_tokens = torch.stack(text_tokens).to(device) if len(text_tokens) > 0 else torch.empty((0,77), dtype=torch.long, device=device)
-            
+        for batch_idx, batch in enumerate(train_loader):
             try:
-                # Forward
+                images = batch['images'].to(device, non_blocking=False)  # Disable non_blocking
+                
+                # Clear gradients early
+                optimizer.zero_grad(set_to_none=True)
+            
+                # Build text inputs or use cached embeddings
+                use_cache = args.text_cache and (text_cache_train is not None)
+                text_embeds_batch = None
+                text_tokens = None
+                if use_cache:
+                    emb_list = []
+                    cache = text_cache_train or {}
+                    for i, fname in enumerate(batch['filenames']):
+                        emb = cache.get(fname)
+                        if emb is None:
+                            # Fallback: on-the-fly
+                            labels = batch['labels'][i]
+                            caption = get_caption_from_labels(labels, base_dataset)
+                            tokens = simple_tokenize(caption)
+                            with torch.no_grad():
+                                _, txt_emb, _ = model.forward(torch.zeros(1,3,224,224, device=device), tokens.unsqueeze(0).to(device))
+                            emb = txt_emb.squeeze(0).cpu()
+                        emb_list.append(emb)
+                    text_embeds_batch = torch.stack(emb_list).to(device) if len(emb_list) > 0 else torch.empty((0,512), device=device)
+                else:
+                    text_tokens = []
+                    for i, labels in enumerate(batch['labels']):
+                        caption_list = []
+                        if 'filenames' in batch:
+                            fname = batch['filenames'][i]
+                            get_captions_fn = getattr(base_dataset, 'get_captions', None)
+                            if callable(get_captions_fn):
+                                try:
+                                    caption_list = get_captions_fn(fname)
+                                except Exception:
+                                    caption_list = []
+                        if isinstance(caption_list, list) and len(caption_list) > 0:
+                            caption = caption_list[0]
+                        else:
+                            caption = get_caption_from_labels(labels, base_dataset)
+                        text_tokens.append(simple_tokenize(caption))
+                    text_tokens = torch.stack(text_tokens).to(device) if len(text_tokens) > 0 else torch.empty((0,77), dtype=torch.long, device=device)
+                
+                # Forward pass with error handling
                 if use_cache and text_embeds_batch is not None and text_embeds_batch.numel() > 0:
                     img_embeds, txt_embeds, logit_scale = model.forward_with_text_embeddings(images, text_embeds_batch)
                 else:
                     if text_tokens is None or text_tokens.numel() == 0:
-                        raise ValueError("Empty text_tokens in batch")
+                        print(f"Warning: Empty batch at epoch {epoch}, batch {batch_idx}")
+                        continue
                     if text_tokens.max().item() >= model.text_encoder.vocab_size:
-                        raise ValueError(f"Token index {text_tokens.max().item()} exceeds vocab size {model.text_encoder.vocab_size}")
+                        print(f"Warning: Invalid token at epoch {epoch}, batch {batch_idx}")
+                        continue
                     img_embeds, txt_embeds, logit_scale = model(images, text_tokens)
+                
                 loss = clip_loss(img_embeds, txt_embeds, logit_scale)
-
-                # Backward
-                optimizer.zero_grad(set_to_none=True)
+                
+                # Check for NaN/Inf
+                if not torch.isfinite(loss):
+                    print(f"Warning: Non-finite loss at epoch {epoch}, batch {batch_idx}: {loss.item()}")
+                    continue
+                
+                # Backward with gradient clipping
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(params, 1.0)
+                torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
                 optimizer.step()
+                
+                epoch_loss += loss.item()
+                batches += 1
+                
+                # More frequent memory cleanup
+                if batch_idx % 100 == 0 and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    
             except RuntimeError as e:
-                if 'illegal memory access' in str(e).lower():
-                    print("\n[Error] CUDA illegal memory access detected. Aborting current run gracefully.")
-                    print("Suggestion: \n - Restart Python process to fully reset GPU state\n - Resume from latest checkpoint with --resume\n - Reduce --batch-size\n - Ensure drivers/toolkit match your PyTorch build")
-                    raise
+                if 'out of memory' in str(e).lower() or 'illegal memory access' in str(e).lower():
+                    print(f"\n[Error] Memory error at epoch {epoch}, batch {batch_idx}: {e}")
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    # Skip this batch and continue
+                    continue
                 else:
                     raise
-            
-            epoch_loss += loss.item()
-            batches += 1
-            
-            # (Removed periodic empty_cache to avoid potential driver instability)
         
         avg_train = epoch_loss / batches
         train_losses.append(avg_train)
