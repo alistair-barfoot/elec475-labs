@@ -22,7 +22,7 @@ from model import CLIPModel
 from train import simple_tokenize, compute_recall_at_k, validate
 
 
-def load_model(checkpoint_path: str, device: torch.device) -> CLIPModel:
+def load_model(checkpoint_path: str, device: torch.device) -> CLIPModel | None:
     """Load a CLIP model from checkpoint."""
     try:
         checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -30,13 +30,61 @@ def load_model(checkpoint_path: str, device: torch.device) -> CLIPModel:
         # Extract config if available
         config = checkpoint.get('config', {})
         
-        # Create model with config or defaults
+        # Auto-detect model architecture from state dict if config is missing
+        state_dict = checkpoint['model_state_dict']
+        use_batchnorm = False
+        use_dropout = False
+        
+        # Check for BatchNorm layers in state dict (look for specific BatchNorm indicators)
+        batchnorm_keys = [key for key in state_dict.keys() if 'BatchNorm' in key or ('running_mean' in key and 'projection' in key)]
+        if batchnorm_keys:
+            use_batchnorm = True
+            print(f"  Detected BatchNorm layers in {checkpoint_path}: {len(batchnorm_keys)} BN parameters")
+        
+        # Check projection layer structure to determine if dropout is present
+        projection_weight_keys = [key for key in state_dict.keys() if 'image_encoder.projection' in key and 'weight' in key]
+        projection_weight_keys.sort()  # Sort to get consistent ordering
+        
+        if len(projection_weight_keys) == 2:
+            # Standard architecture: just input->hidden and hidden->output
+            use_batchnorm = False
+            use_dropout = False
+            print(f"  Detected standard architecture (no regularization) in {checkpoint_path}")
+        elif len(projection_weight_keys) > 2:
+            # Extended architecture with regularization layers
+            # Analyze the layer indices to determine what's present
+            layer_indices = [int(key.split('.')[2]) for key in projection_weight_keys]
+            max_idx = max(layer_indices)
+            
+            # If we have layers beyond index 2, we have regularization
+            if max_idx >= 3:
+                use_dropout = True
+                print(f"  Detected Dropout layers in {checkpoint_path}")
+            
+            # Check if layer 1 exists (BatchNorm position in regularized architecture)
+            if 1 in layer_indices:
+                # Check if there are BatchNorm parameters at layer 1
+                bn_check_keys = [key for key in state_dict.keys() if 'projection.1.' in key and ('running_mean' in key or 'running_var' in key)]
+                if bn_check_keys:
+                    use_batchnorm = True
+                    print(f"  Detected BatchNorm at layer 1 in {checkpoint_path}")
+        
+        print(f"  Final detection: BatchNorm={use_batchnorm}, Dropout={use_dropout}")
+        
+        # Use config values if available, otherwise use detected values
+        final_use_batchnorm = config.get('use_batchnorm', use_batchnorm)
+        final_use_dropout = config.get('use_dropout', use_dropout)
+        final_dropout_rate = config.get('dropout_rate', 0.1)
+        
+        print(f"  Creating model with BatchNorm={final_use_batchnorm}, Dropout={final_use_dropout}")
+        
+        # Create model with detected or configured architecture
         model = CLIPModel(
             embedding_dim=512,
             pretrained_image=True,
-            use_batchnorm=config.get('use_batchnorm', False),
-            use_dropout=config.get('use_dropout', False),
-            dropout_rate=config.get('dropout_rate', 0.1)
+            use_batchnorm=final_use_batchnorm,
+            use_dropout=final_use_dropout,
+            dropout_rate=final_dropout_rate
         ).to(device)
         
         # Load state dict
@@ -47,7 +95,8 @@ def load_model(checkpoint_path: str, device: torch.device) -> CLIPModel:
         
     except Exception as e:
         print(f"Error loading model from {checkpoint_path}: {e}")
-        quit()
+        print(f"This might be due to architecture mismatch. Check if model was trained with different regularization settings.")
+        return None
 
 
 def compute_embeddings(model: CLIPModel, dataloader: DataLoader, device: torch.device, 
@@ -115,11 +164,14 @@ def compute_embeddings(model: CLIPModel, dataloader: DataLoader, device: torch.d
 
 
 def evaluate_retrieval(models: Dict[str, CLIPModel], val_loader: DataLoader, 
-                      device: torch.device) -> Dict[str, Dict]:
+                      device: torch.device, compute_recall: bool = False) -> Dict[str, Dict]:
     """Evaluate retrieval performance for all models."""
     results = {}
     
-    print("Evaluating retrieval performance...")
+    if compute_recall:
+        print("Evaluating retrieval performance...")
+    else:
+        print("Computing embeddings (skipping recall metrics - use --compute-recall for full evaluation)...")
     
     for model_name, model in models.items():
         print(f"  Processing {model_name}...")
@@ -129,12 +181,17 @@ def evaluate_retrieval(models: Dict[str, CLIPModel], val_loader: DataLoader,
             model, val_loader, device, max_samples=2000
         )
         
-        # Compute similarity matrix
-        similarity_matrix = image_embeds @ text_embeds.T
+        # Compute similarity matrix and recall metrics if requested
+        similarity_matrix = None
+        i2t_recalls = None
+        t2i_recalls = None
         
-        # Compute retrieval metrics
-        i2t_recalls = compute_recall_at_k(similarity_matrix, k_values=[1, 5, 10])
-        t2i_recalls = compute_recall_at_k(similarity_matrix.T, k_values=[1, 5, 10])
+        if compute_recall:
+            similarity_matrix = image_embeds @ text_embeds.T
+            
+            # Compute retrieval metrics
+            i2t_recalls = compute_recall_at_k(similarity_matrix, k_values=[1, 5, 10])
+            t2i_recalls = compute_recall_at_k(similarity_matrix.T, k_values=[1, 5, 10])
         
         results[model_name] = {
             'i2t': i2t_recalls,
@@ -244,23 +301,32 @@ def classify_image(image_path: str, class_list: List[str], models: Dict[str, CLI
 
 def create_results_table(retrieval_results: Dict[str, Dict]) -> str:
     """Create a formatted table of retrieval results."""
+    # Check if any model has recall results
+    has_recall_data = any(results.get('i2t') is not None for results in retrieval_results.values())
+    
+    if not has_recall_data:
+        return "No recall metrics computed. Use --compute-recall flag to enable detailed evaluation."
+    
     # Prepare data for table
     table_data = []
     headers = ['Model', 'I->T R@1', 'I->T R@5', 'I->T R@10', 'T->I R@1', 'T->I R@5', 'T->I R@10']
     
     for model_name, results in retrieval_results.items():
-        i2t = results['i2t']
-        t2i = results['t2i']
+        i2t = results.get('i2t')
+        t2i = results.get('t2i')
         
-        row = [
-            model_name,
-            f"{i2t['R@1']*100:.1f}%",
-            f"{i2t['R@5']*100:.1f}%", 
-            f"{i2t['R@10']*100:.1f}%",
-            f"{t2i['R@1']*100:.1f}%",
-            f"{t2i['R@5']*100:.1f}%",
-            f"{t2i['R@10']*100:.1f}%"
-        ]
+        if i2t is None or t2i is None:
+            row = [model_name, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"]
+        else:
+            row = [
+                model_name,
+                f"{i2t['R@1']*100:.1f}%",
+                f"{i2t['R@5']*100:.1f}%", 
+                f"{i2t['R@10']*100:.1f}%",
+                f"{t2i['R@1']*100:.1f}%",
+                f"{t2i['R@5']*100:.1f}%",
+                f"{t2i['R@10']*100:.1f}%"
+            ]
         table_data.append(row)
     
     return tabulate(table_data, headers=headers, tablefmt='grid')
@@ -319,11 +385,11 @@ def save_retrieval_images(retrieval_results: Dict[str, Dict[str, List]], query: 
                          dataset_path: str, output_dir: str = "ablation_results"):
     """Save retrieved images for visualization."""
     output_path = Path(output_dir)
-    output_path.mkdir(exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)  # Create parent directories
     
     # Create query-specific directory
     query_dir = output_path / f"query_{query.replace(' ', '_')}"
-    query_dir.mkdir(exist_ok=True)
+    query_dir.mkdir(parents=True, exist_ok=True)
     
     for model_name, results in retrieval_results.items():
         model_dir = query_dir / model_name
@@ -364,6 +430,8 @@ def main():
                        help="Maximum samples for retrieval evaluation")
     parser.add_argument("--save-images", action="store_true",
                        help="Save retrieved images to disk")
+    parser.add_argument("--compute-recall", action="store_true",
+                       help="Compute Recall@K metrics (slower but comprehensive)")
     parser.add_argument("--output-dir", type=str, default="ablation_results",
                        help="Output directory for results")
     
@@ -418,15 +486,21 @@ def main():
     
     # Evaluate retrieval performance
     print(f"\n{'='*60}")
-    print("RETRIEVAL EVALUATION")
+    if args.compute_recall:
+        print("RETRIEVAL EVALUATION")
+    else:
+        print("EMBEDDING COMPUTATION")
     print('='*60)
     
-    retrieval_results = evaluate_retrieval(models, val_loader, device)
+    retrieval_results = evaluate_retrieval(models, val_loader, device, compute_recall=args.compute_recall)
     
-    # Display results table
-    results_table = create_results_table(retrieval_results)
-    print("\nRetrieval Results:")
-    print(results_table)
+    # Display results table only if recall was computed
+    if args.compute_recall:
+        results_table = create_results_table(retrieval_results)
+        print("\nRetrieval Results:")
+        print(results_table)
+    else:
+        print("\nEmbeddings computed successfully. Use --compute-recall for detailed metrics.")
     
     # Text-to-image retrieval demo
     print(f"\n{'='*60}")
@@ -462,18 +536,23 @@ def main():
         print("ZERO-SHOT CLASSIFICATION DEMO")
         print('='*60)
         
-        classification_results = classify_image(
-            args.test_image, args.classes, models, device
-        )
-        
-        if classification_results:
-            classification_table = create_classification_table(classification_results)
-            print(f"\nClassification results for {args.test_image}:")
-            print(classification_table)
+        # Check if test image exists
+        if not Path(args.test_image).exists():
+            print(f"Warning: Test image not found at {args.test_image}")
+            print("Skipping classification demo.")
+        else:
+            classification_results = classify_image(
+                args.test_image, args.classes, models, device
+            )
+            
+            if classification_results:
+                classification_table = create_classification_table(classification_results)
+                print(f"\nClassification results for {args.test_image}:")
+                print(classification_table)
     
     # Save detailed results
     output_path = Path(args.output_dir)
-    output_path.mkdir(exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)  # Create parent directories
     
     # Save summary report
     report_path = output_path / "ablation_report.txt"
@@ -486,9 +565,14 @@ def main():
             f.write(f"{i+1}. {model_name}: {model_path}\n")
         f.write("\n")
         
-        f.write("Retrieval Results:\n")
-        f.write(results_table)
-        f.write("\n\n")
+        if args.compute_recall:
+            results_table = create_results_table(retrieval_results)
+            f.write("Retrieval Results:\n")
+            f.write(results_table)
+            f.write("\n\n")
+        else:
+            f.write("Retrieval Results:\n")
+            f.write("Recall metrics not computed (--compute-recall flag not used)\n\n")
         
         f.write(f"Text-to-Image Retrieval for '{args.text_query}':\n")
         f.write(retrieval_table)

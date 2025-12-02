@@ -1,0 +1,4 @@
+py -3.13 ablation.py --models outputs_8/best_clip.pth outputs_9/best_clip.pth outputs_10/best_clip.pth outputs_11/best_clip.pth --model-names "Base" "Aug" "AugReg" "Reg" --text-query "sports activity" --test-image  "C:\Users\aliwi\Documents\usb backup\archive\coco2014\images\test2014\COCO_test2014_000000000016.jpg" --classes "soccer" "basketball" "tennis" "football" "baseball" "hockey" --save-images --output-dir results/sports_ablation
+
+
+py -3.13 .\ablation.py --models outputs_8/best_clip.pth outputs_9/best_clip.pth outputs_10/best_clip.pth outputs_11/best_clip.pth --model-names "Base" "Aug" "AugReg" "Reg" --classes "baseball" "dog" "bird" "person" "smile" "friend" "family" "diamond" "field" --test-image "C:\Users\aliwi\Downloads\20240809_213451.jpg"
