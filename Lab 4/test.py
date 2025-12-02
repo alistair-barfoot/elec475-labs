@@ -320,9 +320,43 @@ def main(args):
     
     # Load model
     print(f"Loading model from: {args.checkpoint}")
-    model = CLIPModel(embedding_dim=512, pretrained_image=True).to(device)
     
+    # Load checkpoint first to detect architecture
     checkpoint = torch.load(args.checkpoint, map_location=device)
+    
+    # Try to get config from checkpoint
+    config = checkpoint.get('config', {})
+    
+    # Auto-detect architecture from state dict if config missing
+    state_dict = checkpoint['model_state_dict']
+    use_batchnorm = config.get('use_batchnorm', False)
+    use_dropout = config.get('use_dropout', False)
+    dropout_rate = config.get('dropout_rate', 0.1)
+    
+    # If config not available, detect from state dict
+    if 'use_batchnorm' not in config or 'use_dropout' not in config:
+        # Check for BatchNorm layers
+        bn_keys = [k for k in state_dict.keys() if 'running_mean' in k and 'projection' in k]
+        if bn_keys:
+            use_batchnorm = True
+            print(f"  Detected BatchNorm layers in checkpoint")
+        
+        # Check projection layer count to detect dropout
+        proj_weight_keys = [k for k in state_dict.keys() if 'image_encoder.projection' in k and 'weight' in k]
+        if len(proj_weight_keys) > 2:
+            use_dropout = True
+            print(f"  Detected Dropout layers in checkpoint")
+    
+    print(f"  Creating model with BatchNorm={use_batchnorm}, Dropout={use_dropout}")
+    
+    model = CLIPModel(
+        embedding_dim=512, 
+        pretrained_image=True,
+        use_batchnorm=use_batchnorm,
+        use_dropout=use_dropout,
+        dropout_rate=dropout_rate
+    ).to(device)
+    
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     
@@ -663,7 +697,7 @@ def main(args):
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate CLIP model on retrieval and classification tasks")
     
-    parser.add_argument("--checkpoint", type=str, default="outputs_3_fullrun_16batchsize\\best_clip.pth",
+    parser.add_argument("--checkpoint", type=str, default="Base\\best_clip.pth",
                         help="Path to model checkpoint")
     parser.add_argument("--batch-size", type=int, default=32,
                         help="Batch size for evaluation")
